@@ -1,0 +1,32 @@
+#!/usr/bin/env bun
+
+import { createCliRenderer } from "@opentui/core"
+import { createRoot } from "@opentui/react"
+import { App } from "./App"
+import { helpText, parseArgs } from "./cli"
+import { loadGitModel } from "./git"
+import { createSyntaxConfig } from "./syntax"
+
+const packageJson = await Bun.file(new URL("../package.json", import.meta.url)).json()
+
+try {
+  const options = parseArgs(Bun.argv.slice(2))
+
+  if (options.help) {
+    console.log(helpText())
+    process.exit(0)
+  }
+
+  if (options.version) {
+    console.log(packageJson.version)
+    process.exit(0)
+  }
+
+  const model = loadGitModel(process.cwd(), options.target)
+  const syntax = await createSyntaxConfig()
+  const renderer = await createCliRenderer({ exitOnCtrlC: true })
+  createRoot(renderer).render(<App model={model} target={options.target} syntax={syntax} />)
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error))
+  process.exit(1)
+}
