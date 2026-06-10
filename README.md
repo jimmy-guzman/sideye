@@ -53,6 +53,7 @@ torre --unstaged # start in the unstaged scope
 | `h` / `l`  | collapse / expand folders                           |
 | `tab`      | switch focus between tree and viewer                |
 | `enter`    | open the focused item / jump to a problem           |
+| `ctrl-p`   | go to file: fuzzy-search the whole repo             |
 | `s`        | cycle scope: all changes → staged → unstaged        |
 | `c`        | toggle changes-only filter for the tree             |
 | `v`        | toggle diff ↔ full file view for a changed file     |

@@ -113,6 +113,7 @@ Problems:
   p/escape   close the panel
 
 Anywhere:
+  ctrl-p     open the go-to-file palette (type to fuzzy-search, enter jumps)
   s          cycle scope: all changes -> staged -> unstaged
   c          toggle changes-only filter for the tree
   v          toggle diff <-> full file view

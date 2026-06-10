@@ -6,6 +6,7 @@ import { nextScope, scopeLabel, type DiffScope } from "./cli"
 import { copyToClipboard, formatCopyReference } from "./copy-reference"
 import { allFindings, findingsLineMap, globalCounts, initialCheckerState, markPending, problemCounts, runDiagnostics, type CheckerState, type Diagnostic } from "./diagnostics"
 import { contentToContextPatch, loadFileContent, type FileContent } from "./file-view"
+import { rankFiles } from "./fuzzy"
 import type { ChangedFile, GitModel, StageState } from "./git"
 import { loadFileDiff, loadGitModel, mergeModel } from "./git"
 import { lineReference, renderPatch } from "./patch"
@@ -51,12 +52,16 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const [focusedPane, setFocusedPane] = useState<"tree" | "diff" | "problems">("tree")
   const [problemsOpen, setProblemsOpen] = useState(false)
   const [problemIndex, setProblemIndex] = useState(0)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [paletteQuery, setPaletteQuery] = useState("")
+  const [paletteIndex, setPaletteIndex] = useState(0)
   const [cursorIndex, setCursorIndex] = useState(0)
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | undefined>(undefined)
   const [activityLog, setActivityLog] = useState(emptyActivityLog)
   const [now, setNow] = useState(() => Date.now())
   const sidebarRef = useRef<ScrollBoxRenderable>(null)
   const problemsRef = useRef<ScrollBoxRenderable>(null)
+  const paletteRef = useRef<ScrollBoxRenderable>(null)
   const diffRef = useRef<DiffRenderable>(null)
   const previousChangedRef = useRef<ChangedFile[]>(initialModel.changed)
   const previousScopeKeyRef = useRef(initialModel.scopeKey)
@@ -68,6 +73,14 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const problems = useMemo(() => allFindings(checkerState), [checkerState])
   const counts = useMemo(() => globalCounts(checkerState), [checkerState])
   const recencyByPath = useMemo(() => lastChangedAt(activityLog), [activityLog])
+  const paletteResults = useMemo(() => {
+    if (!paletteOpen) {
+      return []
+    }
+
+    const paths = [...new Set([...model.repoFiles.map((file) => file.path), ...model.changedByPath.keys()])]
+    return rankFiles(paletteQuery, paths, { lastChangedAt: recencyByPath, changed: new Set(model.changedByPath.keys()), limit: 50 })
+  }, [model.changedByPath, model.repoFiles, paletteOpen, paletteQuery, recencyByPath])
   const lineMap = useMemo(() => (selectedPath === undefined ? new Map<number, Diagnostic[]>() : findingsLineMap(selectedPath, checkerState)), [checkerState, selectedPath])
 
   const fileContent = useMemo<FileContent | undefined>(() => {
@@ -203,6 +216,12 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   }, [problemIndex, problemsOpen])
 
   useEffect(() => {
+    if (paletteOpen) {
+      paletteRef.current?.scrollChildIntoView(`palette-${paletteIndex}`)
+    }
+  }, [paletteIndex, paletteOpen])
+
+  useEffect(() => {
     const firstChanged = navigableLines.findIndex((line) => line.type !== "context")
     setCursorIndex(firstChanged === -1 ? 0 : firstChanged)
     // reset to the first change only when the file changes, not on live edits of the same file
@@ -293,6 +312,25 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   }, [cursorIndex, lineMap, navigableLines, viewerHeight, renderer])
 
   useKeyboard((key) => {
+    if (paletteOpen) {
+      if (key.name === "escape") {
+        setPaletteOpen(false)
+      } else if (key.name === "down" || (key.ctrl && key.name === "n")) {
+        setPaletteIndex((current) => Math.min(current + 1, Math.max(0, paletteResults.length - 1)))
+      } else if (key.name === "up" || (key.ctrl && key.name === "p")) {
+        setPaletteIndex((current) => Math.max(current - 1, 0))
+      }
+      // every other key belongs to the palette input
+      return
+    }
+
+    if (key.ctrl && key.name === "p") {
+      setPaletteOpen(true)
+      setPaletteQuery("")
+      setPaletteIndex(0)
+      return
+    }
+
     if (key.name === "q") {
       renderer.destroy()
       return
@@ -479,7 +517,18 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     setExpandedDirectories((current) => expandAncestorsForPath(current, path))
   }
 
+  function pickPaletteResult() {
+    const path = paletteResults[paletteIndex]
+    if (path !== undefined) {
+      selectFile(path)
+      setFocusedPane("diff")
+    }
+    setPaletteOpen(false)
+  }
+
   const sidebarWidth = Math.max(34, Math.min(54, Math.floor(width * 0.34)))
+  const paletteWidth = Math.max(30, Math.min(70, width - 8))
+  const paletteLeft = Math.max(0, Math.floor((width - paletteWidth) / 2))
   const cursorLine = navigableLines[cursorIndex]
   const cursorLineNumber = cursorLine?.newLine ?? cursorLine?.oldLine
   const cursorFindings = cursorLine?.newLine === undefined ? undefined : lineMap.get(cursorLine.newLine)
@@ -577,6 +626,47 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
         <text fg="#71717a">{keyHints(focusedPane)}</text>
         <text fg="#a1a1aa">{statusRight}</text>
       </box>
+      {paletteOpen ? (
+        <box position="absolute" left={paletteLeft} top={1} width={paletteWidth} flexDirection="column" borderStyle="single" borderColor="#ff4fb8" backgroundColor="#111113" zIndex={100}>
+          <input
+            focused
+            width="100%"
+            placeholder="go to file…"
+            backgroundColor="#111113"
+            focusedBackgroundColor="#111113"
+            textColor="#e4e4e7"
+            cursorColor="#ff4fb8"
+            onInput={(value: string) => {
+              setPaletteQuery(value)
+              setPaletteIndex(0)
+            }}
+            onSubmit={pickPaletteResult}
+          />
+          <scrollbox ref={paletteRef} width="100%" height={Math.min(12, Math.max(1, paletteResults.length))} scrollY viewportCulling>
+            {paletteResults.length === 0 ? (
+              <box id="palette-empty" paddingLeft={1}>
+                <text fg="#71717a">no matches</text>
+              </box>
+            ) : (
+              paletteResults.map((path, index) => {
+                const changed = model.changedByPath.get(path)
+                const recency = recencyLevel(recencyByPath.get(path), now)
+                // key and id both by index: reordering results must never
+                // change a live renderable's id or the scrollbox loses rows
+                return (
+                  <box key={`palette-${index}`} id={`palette-${index}`} width="100%" flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1} backgroundColor={index === paletteIndex ? "#3a1530" : "#111113"}>
+                    <box flexDirection="row">
+                      <text fg={index === paletteIndex ? "#ffffff" : changed === undefined ? "#a1a1aa" : kindColor(changed.kind)}>{path}</text>
+                      {recency === "none" ? null : <text fg={recency === "fresh" ? "#ff4fb8" : "#8a3a6e"}> ●</text>}
+                    </box>
+                    {changed === undefined ? null : <text fg={stageColor(changed.stage)}>{kindLetter(changed.kind)}</text>}
+                  </box>
+                )
+              })
+            )}
+          </scrollbox>
+        </box>
+      ) : null}
     </box>
   )
 }
@@ -701,10 +791,10 @@ function keyHints(pane: "tree" | "diff" | "problems") {
   }
 
   if (pane === "diff") {
-    return "j/k cursor · v file/diff · y copy · p problems · tab files · q quit"
+    return "j/k · v file/diff · y copy · ctrl-p goto · p problems · q quit"
   }
 
-  return "j/k file · h/l fold · s scope · c changes · . latest · p problems · q quit"
+  return "j/k · h/l fold · ctrl-p goto · s scope · c changes · p problems · q quit"
 }
 
 function stageColor(stage: StageState) {
