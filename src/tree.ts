@@ -1,57 +1,52 @@
-import type { CheckerState } from "./diagnostics"
-import { summarizeBadges } from "./diagnostics"
-import type { ChangedFile } from "./git"
+import type { ChangedFile, RepoFile } from "./git"
 
-export type FileTreeNode =
-  | {
-      type: "directory"
-      id: string
-      name: string
-      path: string
-      depth: number
-      additions: number
-      deletions: number
-      fileCount: number
-      warnings: string[]
-      children: FileTreeNode[]
-    }
-  | {
-      type: "file"
-      id: string
-      name: string
-      path: string
-      depth: number
-      additions: number
-      deletions: number
-      warnings: string[]
-      file: ChangedFile
-    }
+export type FileNode = {
+  type: "file"
+  id: string
+  name: string
+  path: string
+  depth: number
+  tracked: boolean
+  changed: ChangedFile | undefined
+}
+
+export type DirectoryNode = {
+  type: "directory"
+  id: string
+  name: string
+  path: string
+  depth: number
+  additions: number
+  deletions: number
+  fileCount: number
+  changedCount: number
+  warnings: string[]
+  children: FileTreeNode[]
+}
+
+export type FileTreeNode = DirectoryNode | FileNode
 
 export type FileTreeRow = {
   node: FileTreeNode
   index: number
 }
 
-type MutableDirectory = Extract<FileTreeNode, { type: "directory" }>
+export type BuildTreeOptions = {
+  changesOnly: boolean
+}
 
-export function buildFileTree(files: ChangedFile[]) {
-  const root: MutableDirectory = {
-    type: "directory",
-    id: ".",
-    name: ".",
-    path: "",
-    depth: -1,
-    additions: 0,
-    deletions: 0,
-    fileCount: 0,
-    warnings: [],
-    children: [],
-  }
+export function buildFileTree(repoFiles: RepoFile[], changedByPath: Map<string, ChangedFile>, options: BuildTreeOptions): FileTreeNode[] {
+  const root = makeDirectory("", "")
+  const directories = new Map<string, DirectoryNode>([["", root]])
+  const seen = new Set<string>()
 
-  const directories = new Map<string, MutableDirectory>([["", root]])
+  const insert = (path: string, tracked: boolean) => {
+    const changed = changedByPath.get(path)
+    if (options.changesOnly && changed === undefined) {
+      return
+    }
 
-  for (const file of files) {
-    const parts = file.path.split("/")
+    const parts = path.split("/")
     let parent = root
     let currentPath = ""
 
@@ -60,18 +55,7 @@ export function buildFileTree(files: ChangedFile[]) {
       let directory = directories.get(currentPath)
 
       if (directory === undefined) {
-        directory = {
-          type: "directory",
-          id: `dir:${currentPath}`,
-          name: directoryName,
-          path: currentPath,
-          depth: currentPath.split("/").length - 1,
-          additions: 0,
-          deletions: 0,
-          fileCount: 0,
-          warnings: [],
-          children: [],
-        }
+        directory = makeDirectory(directoryName, currentPath)
         directories.set(currentPath, directory)
         parent.children.push(directory)
       }
@@ -81,41 +65,41 @@ export function buildFileTree(files: ChangedFile[]) {
 
     parent.children.push({
       type: "file",
-      id: `file:${file.path}`,
-      name: parts.at(-1) ?? file.path,
-      path: file.path,
-      depth: parts.length - 1,
-      additions: file.additions,
-      deletions: file.deletions,
-      warnings: file.warnings,
-      file,
+      id: `file:${path}`,
+      name: parts.at(-1) ?? path,
+      path,
+      depth: 0,
+      tracked,
+      changed,
     })
+  }
+
+  for (const file of repoFiles) {
+    seen.add(file.path)
+    insert(file.path, file.tracked)
+  }
+
+  // staged deletions vanish from ls-files; keep them visible via the changed set
+  for (const path of changedByPath.keys()) {
+    if (!seen.has(path)) {
+      insert(path, true)
+    }
   }
 
   aggregateDirectory(root)
   sortTree(root)
-  return root.children
-}
-
-export function defaultExpandedDirectories(nodes: FileTreeNode[]) {
-  const expanded = new Set<string>()
-
-  const visit = (node: FileTreeNode) => {
-    if (node.type === "file") {
-      return
-    }
-
-    if (node.fileCount < 8) {
-      expanded.add(node.id)
-    }
-
-    for (const child of node.children) {
-      visit(child)
-    }
+  const children = root.children.map(flattenSingleChildChains)
+  for (const child of children) {
+    assignDepths(child, 0)
   }
 
-  for (const node of nodes) {
-    visit(node)
+  return children
+}
+
+export function defaultExpandedDirectories(changedPaths: string[]) {
+  let expanded = new Set<string>()
+  for (const path of changedPaths) {
+    expanded = expandAncestorsForPath(expanded, path)
   }
 
   return expanded
@@ -152,24 +136,13 @@ export function flattenTree(nodes: FileTreeNode[], expanded: Set<string>) {
   return rows
 }
 
-export function describeTreeNode(node: FileTreeNode, checkerState: CheckerState) {
-  const churn = `+${node.additions} -${node.deletions}`
-  const warnings = node.warnings.length === 0 ? "" : ` !${node.warnings.join(",")}`
-
-  if (node.type === "directory") {
-    return `${churn}${warnings}  ${node.fileCount} files`
-  }
-
-  return `${churn}${warnings}  ${summarizeBadges(node.path, checkerState).join(" ")}`
-}
-
 export function findRowIndexForPath(rows: FileTreeRow[], path: string) {
   return rows.findIndex((row) => row.node.type === "file" && row.node.path === path)
 }
 
-export function firstFileInNode(node: FileTreeNode): ChangedFile | undefined {
+export function firstFileInNode(node: FileTreeNode): FileNode | undefined {
   if (node.type === "file") {
-    return node.file
+    return node
   }
 
   for (const child of node.children) {
@@ -182,45 +155,64 @@ export function firstFileInNode(node: FileTreeNode): ChangedFile | undefined {
   return undefined
 }
 
-function aggregateDirectory(directory: MutableDirectory) {
+function makeDirectory(name: string, path: string): DirectoryNode {
+  return {
+    type: "directory",
+    id: `dir:${path}`,
+    name,
+    path,
+    depth: 0,
+    additions: 0,
+    deletions: 0,
+    fileCount: 0,
+    changedCount: 0,
+    warnings: [],
+    children: [],
+  }
+}
+
+function aggregateDirectory(directory: DirectoryNode) {
   const warnings = new Set<string>()
   let additions = 0
   let deletions = 0
   let fileCount = 0
+  let changedCount = 0
 
   for (const child of directory.children) {
     if (child.type === "directory") {
       aggregateDirectory(child)
+      additions += child.additions
+      deletions += child.deletions
+      fileCount += child.fileCount
+      changedCount += child.changedCount
+      for (const warning of child.warnings) {
+        warnings.add(warning)
+      }
+      continue
     }
 
-    additions += child.additions
-    deletions += child.deletions
-    for (const warning of child.warnings) {
-      warnings.add(warning)
+    fileCount += 1
+    if (child.changed !== undefined) {
+      changedCount += 1
+      additions += child.changed.additions
+      deletions += child.changed.deletions
+      for (const warning of child.changed.warnings) {
+        warnings.add(warning)
+      }
     }
-    fileCount += child.type === "file" ? 1 : child.fileCount
   }
 
   directory.additions = additions
   directory.deletions = deletions
   directory.fileCount = fileCount
+  directory.changedCount = changedCount
   directory.warnings = Array.from(warnings)
 }
 
-function sortTree(directory: MutableDirectory) {
+function sortTree(directory: DirectoryNode) {
   directory.children.sort((a, b) => {
     if (a.type !== b.type) {
       return a.type === "directory" ? -1 : 1
-    }
-
-    const warningDelta = b.warnings.length - a.warnings.length
-    if (warningDelta !== 0) {
-      return warningDelta
-    }
-
-    const churnDelta = b.additions + b.deletions - (a.additions + a.deletions)
-    if (churnDelta !== 0) {
-      return churnDelta
     }
 
     return a.name.localeCompare(b.name)
@@ -229,6 +221,30 @@ function sortTree(directory: MutableDirectory) {
   for (const child of directory.children) {
     if (child.type === "directory") {
       sortTree(child)
+    }
+  }
+}
+
+function flattenSingleChildChains(node: FileTreeNode): FileTreeNode {
+  if (node.type === "file") {
+    return node
+  }
+
+  let current = node
+  while (current.children.length === 1 && current.children[0]?.type === "directory") {
+    const child = current.children[0]
+    current = { ...child, name: `${current.name}/${child.name}` }
+  }
+
+  return { ...current, children: current.children.map(flattenSingleChildChains) }
+}
+
+function assignDepths(node: FileTreeNode, depth: number) {
+  node.depth = depth
+
+  if (node.type === "directory") {
+    for (const child of node.children) {
+      assignDepths(child, depth + 1)
     }
   }
 }

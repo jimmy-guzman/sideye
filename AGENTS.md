@@ -2,13 +2,20 @@
 
 ## Product
 
-`ojo` is a terminal-first glance tool for reviewing what an AI coding agent just changed. The human stays in charge: the tool helps inspect robot output, but it never reviews, explains, approves, rejects, gates, or talks back to an agent.
+`torre` (Spanish for tower, as in control tower) is a read-only companion TUI for CLI coding agents (claude code, opencode, codex). The user runs an agent in one terminal pane and `torre` in another, replacing the editor they would otherwise open just to see what is there, what is happening, and what is the difference — everything an IDE shows you, nothing it does for you, with the "integrated" part deliberately missing. The human stays in charge: the tool helps inspect robot output, but it never reviews, explains, approves, rejects, gates, or talks back to an agent.
+
+The four pillars:
+
+1. **Full repo tree with changed overlay** — browse the entire project tree like an IDE sidebar; open and read any file (read-only, syntax highlighted); changed files are tinted and tagged in place.
+2. **Simple change scopes** — all changes, staged only, and unstaged only, cycled in-app. No commit-log browser, no timelines, no snapshots.
+3. **Live with activity awareness** — git polling keeps the view fresh while the agent edits; recency markers show what was just touched and decay silently; one key jumps to the latest activity.
+4. **Static analysis surfaced like an IDE** — lint/tsc/fmt findings appear in a problems panel, as inline line markers in the viewer, and as per-file markers in the tree, repo-wide rather than changed-files-only; checks re-run automatically after the repo goes quiet.
 
 The core loop is:
 
-1. Glance at the changed-file map.
-2. Drill into a suspicious diff.
-3. Copy a `path:line:column` reference plus snippet.
+1. Run the agent next to `torre` and follow its edits as they land.
+2. Glance at the tree, open any file or diff, check the problems panel.
+3. Copy a `path:line` reference plus snippet.
 4. Paste that reference into the agent conversation and redirect in your own words.
 
 ## Technical Defaults
@@ -48,19 +55,21 @@ Project skills are installed under `.agents/skills`.
 
 ## Implementation Guardrails
 
-- `ojo [ref]` defaults to working tree vs `HEAD`.
-- `ojo --staged` compares staged changes.
+- `torre [ref]` defaults to the `all` scope (worktree vs `HEAD`); `--staged` and `--unstaged` set the initial scope; `s` cycles scopes in-app (`unstaged` is plain `git diff` and ignores the ref).
 - The tool must work in any git repo, not only this repo or agent-created worktrees.
-- Include untracked files in the file map and render them as all-added diffs.
-- Tag each file as staged, unstaged, mixed, or untracked from `git status` and show it in the map.
-- The view is live: poll git and refresh the file map and diff while the user watches.
-- Compute file ordering at first paint and preserve it across live refreshes; new files append and removed files drop, so the list never reorders under the cursor.
-- Preserve the user's selection and diff cursor across refreshes; reset the cursor only on file switch.
-- Late diagnostics must fill badges in place and never reorder the list.
-- Checker badges must use explicit states: `pending`, `clean`, `findings`, and `failed` when needed.
-- Missing or empty diagnostics must never render as clean; a file that changes returns its badges to `pending` until checks re-run.
-- Diagnostics run on demand: once at startup and when the user presses `r`. New-vs-baseline diagnostics are deferred.
-- Do not implement an LSP client, web preview, PR workflow, accept/reject protocol, or agent integration in v1.
+- The tree shows the full repo from `git ls-files` (tracked) plus `git ls-files --others --exclude-standard` (untracked, so gitignore is respected), union'd with the changed set so staged deletions stay visible.
+- Tree ordering is directories-first, alphabetical, always — stable under polling by construction, so the list never reorders under the cursor. Single-child directory chains flatten into one row. `c` toggles a changes-only filter.
+- Include untracked files in the changed set (except in the `staged` scope) and render them as all-added diffs.
+- Tag each changed file with its stage state (staged, unstaged, mixed, untracked) from `git status` and keep it distinguishable in the tree.
+- The view is live: poll git and refresh the tree, diff, and file content while the user watches. Preserve selection (by path) and the cursor across refreshes; reset the cursor only on file switch.
+- Selecting an unchanged file shows its full content read-only; `v` toggles a changed file between diff and full content. Full files render through the diff viewer as synthesized all-context patches. Binary, missing, and oversized files render explicit placeholders, never raw bytes.
+- Recency markers come from an append-only in-memory activity event log (the seam for a future persistence layer); they decay silently (fresh under 5s, recent under 30s) and `.` jumps to the latest activity. A scope switch is not activity.
+- Diagnostics retain findings for every reported path, not just changed files (tsc runs project-wide). They surface in the problems panel (`p`), as inline line markers in the viewer, and as per-file markers in the tree.
+- Late diagnostics must fill badges and markers in place and never reorder the tree.
+- Checker badges must use explicit states: `pending`, `clean`, `findings`, and `failed` when needed. Missing or empty diagnostics must never render as clean; a file that changes returns its badges to `pending` until checks re-run.
+- Diagnostics run at startup, on `r`, and automatically once the repo has been quiet for ~2s after activity. New-vs-baseline diagnostics are deferred.
+- Git data renders first; diagnostics stream in later as decorations over the stable tree.
+- Do not implement an LSP client, web preview, PR workflow, accept/reject protocol, agent integration, or a database in v1.
 
 ## Verification
 

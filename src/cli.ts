@@ -1,22 +1,30 @@
-export type DiffTarget =
-  | { kind: "worktree"; ref: string }
-  | { kind: "staged"; ref: string }
+export type ScopeKind = "all" | "staged" | "unstaged"
+
+export type DiffScope = {
+  kind: ScopeKind
+  ref: string
+}
 
 export type CliOptions = {
-  target: DiffTarget
+  scope: DiffScope
   help: boolean
   version: boolean
 }
 
 export function parseArgs(args: string[]): CliOptions {
-  let staged = false
+  let kind: ScopeKind = "all"
   let help = false
   let version = false
   let ref: string | undefined
 
   for (const arg of args) {
     if (arg === "--staged") {
-      staged = true
+      kind = "staged"
+      continue
+    }
+
+    if (arg === "--unstaged") {
+      kind = "unstaged"
       continue
     }
 
@@ -41,48 +49,83 @@ export function parseArgs(args: string[]): CliOptions {
     ref = arg
   }
 
-  const baseRef = ref ?? "HEAD"
-
   return {
     help,
     version,
-    target: staged ? { kind: "staged", ref: baseRef } : { kind: "worktree", ref: baseRef },
+    scope: { kind, ref: ref ?? "HEAD" },
   }
 }
 
+export function nextScope(kind: ScopeKind): ScopeKind {
+  if (kind === "all") {
+    return "staged"
+  }
+
+  if (kind === "staged") {
+    return "unstaged"
+  }
+
+  return "all"
+}
+
+export function scopeLabel(scope: DiffScope) {
+  if (scope.kind === "staged") {
+    return `staged vs ${scope.ref}`
+  }
+
+  if (scope.kind === "unstaged") {
+    return "unstaged"
+  }
+
+  return `worktree vs ${scope.ref}`
+}
+
 export function helpText() {
-  return `ojo - terminal glance review for git diffs
+  return `torre - read-only companion TUI for CLI coding agents
 
 Usage:
-  ojo
-  ojo <ref>
-  ojo --staged [ref]
+  torre
+  torre <ref>
+  torre --staged [ref]
+  torre --unstaged
 
 Keys:
-  tab        switch focus between the file list and the diff
+  tab        switch focus between the file tree and the viewer
 
-File list:
-  j/down     next file
-  k/up       previous file
+File tree:
+  j/down     next row
+  k/up       previous row
   h/left     collapse folder
   l/right    expand folder
   enter      open focused tree item
 
-Diff:
+Viewer:
   j/down     move cursor down a line
   k/up       move cursor up a line
   ctrl-d/u   move cursor half a page
   g/G        jump to first / last line
-  h/left     return focus to the file list
+  h/left     return focus to the file tree
+
+Problems:
+  j/down     next problem
+  k/up       previous problem
+  enter      jump to the problem's file and line
+  p/escape   close the panel
 
 Anywhere:
-  f          load full diff when truncated
+  s          cycle scope: all changes -> staged -> unstaged
+  c          toggle changes-only filter for the tree
+  v          toggle diff <-> full file view
+  p          toggle the problems panel
+  .          jump to the most recently changed file
+  f          load full content when truncated
   y          copy path:line + snippet at the cursor
   n          jump to next file with findings
   r          re-run checks
   q/escape   quit
 
-The view is live: the file map and diff refresh as files change. Each file is
-tagged staged / unstaged / mixed / new.
+The whole repo renders as a tree with changes overlaid; open any file
+read-only. The view is live: files, diffs, and recency markers refresh as an
+agent edits, and checks re-run after the repo goes quiet.
 `
 }

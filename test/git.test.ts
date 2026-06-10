@@ -1,9 +1,39 @@
 import { describe, expect, test } from "bun:test"
-import { mergeModel, parseNameStatus, parseNumstat, parsePorcelainStatus, parseUntrackedFiles, type ChangedFile, type GitModel } from "../src/git"
+import { diffArgs, mergeModel, nameStatusArgs, numstatArgs, parseNameStatus, parseNumstat, parsePorcelainStatus, parseUntrackedFiles, type ChangedFile, type GitModel } from "../src/git"
 
 function file(path: string, overrides: Partial<ChangedFile> = {}): ChangedFile {
-  return { path, kind: "modified", stage: "unstaged", additions: 1, deletions: 0, binary: false, warnings: [], sortIndex: 0, ...overrides }
+  return { path, kind: "modified", stage: "unstaged", additions: 1, deletions: 0, binary: false, warnings: [], ...overrides }
 }
+
+function model(changed: ChangedFile[], repoFilesKey = "key", scopeKey = "all:HEAD"): GitModel {
+  return {
+    repoRoot: "/repo",
+    scopeKey,
+    changed,
+    changedByPath: new Map(changed.map((entry) => [entry.path, entry])),
+    repoFiles: changed.map((entry) => ({ path: entry.path, tracked: true })),
+    repoFilesKey,
+  }
+}
+
+describe("scope arguments", () => {
+  test("all compares the worktree against the ref", () => {
+    expect(diffArgs({ kind: "all", ref: "main" })).toEqual(["git", "diff", "main"])
+    expect(numstatArgs({ kind: "all", ref: "main" })).toEqual(["git", "diff", "main", "--numstat"])
+    expect(nameStatusArgs({ kind: "all", ref: "main" })).toEqual(["git", "diff", "main", "--name-status"])
+  })
+
+  test("staged compares the index against the ref", () => {
+    expect(diffArgs({ kind: "staged", ref: "HEAD" })).toEqual(["git", "diff", "--cached", "HEAD"])
+    expect(numstatArgs({ kind: "staged", ref: "HEAD" })).toEqual(["git", "diff", "--cached", "HEAD", "--numstat"])
+  })
+
+  test("unstaged compares the worktree against the index and ignores the ref", () => {
+    expect(diffArgs({ kind: "unstaged", ref: "main" })).toEqual(["git", "diff"])
+    expect(numstatArgs({ kind: "unstaged", ref: "main" })).toEqual(["git", "diff", "--numstat"])
+    expect(nameStatusArgs({ kind: "unstaged", ref: "main" })).toEqual(["git", "diff", "--name-status"])
+  })
+})
 
 describe("parseUntrackedFiles", () => {
   test("parses nul-delimited untracked files without directory placeholders", () => {
@@ -56,25 +86,27 @@ describe("parsePorcelainStatus", () => {
 })
 
 describe("mergeModel", () => {
-  const root = "/repo"
-
   test("returns the same reference when nothing changed", () => {
-    const prev: GitModel = { repoRoot: root, files: [file("a.ts"), file("b.ts")] }
-    const next: GitModel = { repoRoot: root, files: [file("a.ts"), file("b.ts")] }
+    const prev = model([file("a.ts"), file("b.ts")])
+    const next = model([file("a.ts"), file("b.ts")])
     expect(mergeModel(prev, next)).toBe(prev)
   })
 
-  test("preserves order, appends new, drops removed", () => {
-    const prev: GitModel = { repoRoot: root, files: [file("a.ts"), file("b.ts")] }
-    const next: GitModel = { repoRoot: root, files: [file("c.ts"), file("b.ts", { additions: 9 }), file("a.ts")] }
-    const merged = mergeModel(prev, next)
-    expect(merged.files.map((f) => f.path)).toEqual(["a.ts", "b.ts", "c.ts"])
-    expect(merged.files.find((f) => f.path === "b.ts")?.additions).toBe(9)
+  test("returns the next model when churn changes", () => {
+    const prev = model([file("a.ts")])
+    const next = model([file("a.ts", { additions: 9 })])
+    expect(mergeModel(prev, next)).toBe(next)
   })
 
-  test("drops files that disappeared", () => {
-    const prev: GitModel = { repoRoot: root, files: [file("a.ts"), file("gone.ts")] }
-    const next: GitModel = { repoRoot: root, files: [file("a.ts")] }
-    expect(mergeModel(prev, next).files.map((f) => f.path)).toEqual(["a.ts"])
+  test("returns the next model when repo files change", () => {
+    const prev = model([file("a.ts")], "before")
+    const next = model([file("a.ts")], "after")
+    expect(mergeModel(prev, next)).toBe(next)
+  })
+
+  test("returns the next model when the scope changes, even with identical content", () => {
+    const prev = model([file("a.ts")], "key", "all:HEAD")
+    const next = model([file("a.ts")], "key", "unstaged:HEAD")
+    expect(mergeModel(prev, next)).toBe(next)
   })
 })

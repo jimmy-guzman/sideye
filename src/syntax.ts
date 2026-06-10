@@ -13,7 +13,7 @@ export type SyntaxConfig =
       status: string
     }
 
-export const ojoSyntaxStyle = SyntaxStyle.fromStyles({
+export const torreSyntaxStyle = SyntaxStyle.fromStyles({
   default: { fg: "#e4e4e7" },
   comment: { fg: "#71717a", dim: true },
   punctuation: { fg: "#a1a1aa" },
@@ -44,7 +44,7 @@ export async function createSyntaxConfig(): Promise<SyntaxConfig> {
     await treeSitterClient.initialize()
     return {
       enabled: true,
-      style: ojoSyntaxStyle,
+      style: torreSyntaxStyle,
       treeSitterClient,
       status: "syntax highlighting ready",
     }

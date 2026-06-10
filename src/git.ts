@@ -1,5 +1,5 @@
 import { readFileSync, statSync } from "node:fs"
-import type { DiffTarget } from "./cli"
+import type { DiffScope } from "./cli"
 import { runCommand } from "./process"
 
 export type ChangeKind = "modified" | "added" | "deleted" | "renamed" | "untracked"
@@ -15,12 +15,20 @@ export type ChangedFile = {
   deletions: number
   binary: boolean
   warnings: string[]
-  sortIndex: number
+}
+
+export type RepoFile = {
+  path: string
+  tracked: boolean
 }
 
 export type GitModel = {
   repoRoot: string
-  files: ChangedFile[]
+  scopeKey: string
+  changed: ChangedFile[]
+  changedByPath: Map<string, ChangedFile>
+  repoFiles: RepoFile[]
+  repoFilesKey: string
 }
 
 type StatusEntry = {
@@ -29,48 +37,76 @@ type StatusEntry = {
   kind: ChangeKind
 }
 
-export function loadGitModel(cwd: string, target: DiffTarget): GitModel {
+export function loadGitModel(cwd: string, scope: DiffScope): GitModel {
   const repoRoot = runCommand(["git", "rev-parse", "--show-toplevel"], cwd).stdout.trim()
-  const untracked = target.kind === "staged" ? [] : parseUntrackedFiles(runCommand(["git", "ls-files", "--others", "--exclude-standard", "-z"], repoRoot).stdout)
-  const nameStatus = parseNameStatus(runCommand(nameStatusArgs(target), repoRoot).stdout)
+  const trackedOutput = runCommand(["git", "ls-files", "-z"], repoRoot).stdout
+  const untrackedOutput = runCommand(["git", "ls-files", "--others", "--exclude-standard", "-z"], repoRoot).stdout
+  const untracked = scope.kind === "staged" ? [] : parseUntrackedFiles(untrackedOutput)
+  const nameStatus = parseNameStatus(runCommand(nameStatusArgs(scope), repoRoot).stdout)
   const statusByPath = new Map([...nameStatus, ...untracked].map((entry) => [entry.path, entry]))
-  const numstat = parseNumstat(runCommand(numstatArgs(target), repoRoot).stdout)
+  const numstat = parseNumstat(runCommand(numstatArgs(scope), repoRoot).stdout)
   const numstatByPath = new Map(numstat.map((entry) => [entry.path, entry]))
   const stageByPath = parsePorcelainStatus(runCommand(["git", "status", "--porcelain=v1", "-z"], repoRoot).stdout)
   const paths = new Set([...numstatByPath.keys(), ...statusByPath.keys()])
 
-  const files = Array.from(paths)
-    .map((path, sortIndex) => {
+  const changed = Array.from(paths)
+    .map((path) => {
       const stat = numstatByPath.get(path)
       const statusEntry = statusByPath.get(path)
       const kind = statusEntry?.kind ?? inferKind(path, stat?.deletions ?? 0, stat?.additions ?? 0)
       const untrackedStat = kind === "untracked" && stat === undefined ? statUntrackedFile(repoRoot, path) : undefined
-      const oldPath = statusEntry?.oldPath
       const file: ChangedFile = {
         path,
-        oldPath,
+        oldPath: statusEntry?.oldPath,
         kind,
         stage: stageByPath.get(path) ?? (kind === "untracked" ? "untracked" : "unstaged"),
         additions: stat?.additions ?? untrackedStat?.additions ?? 0,
         deletions: stat?.deletions ?? 0,
         binary: stat?.binary ?? untrackedStat?.binary ?? false,
         warnings: warningsFor(path, kind, stat?.additions ?? untrackedStat?.additions ?? 0, stat?.deletions ?? 0),
-        sortIndex,
       }
       return file
     })
-    .sort(compareFiles)
-    .map((file, sortIndex) => ({ ...file, sortIndex }))
+    .sort((a, b) => a.path.localeCompare(b.path))
 
-  return { repoRoot, files }
+  const repoFilesKey = `${trackedOutput}\x01${untrackedOutput}`
+
+  return {
+    repoRoot,
+    scopeKey: `${scope.kind}:${scope.ref}`,
+    changed,
+    changedByPath: new Map(changed.map((file) => [file.path, file])),
+    repoFiles: parseRepoFiles(trackedOutput, untrackedOutput, repoFilesKey),
+    repoFilesKey,
+  }
 }
 
-export function loadFileDiff(repoRoot: string, target: DiffTarget, file: ChangedFile) {
+export function loadFileDiff(repoRoot: string, scope: DiffScope, file: ChangedFile) {
   if (file.kind === "untracked") {
     return runCommand(["git", "diff", "--no-index", "--", "/dev/null", file.path], repoRoot, [0, 1]).stdout
   }
 
-  return runCommand([...diffArgs(target), "--", file.path], repoRoot, [0, 1]).stdout
+  return runCommand([...diffArgs(scope), "--", file.path], repoRoot, [0, 1]).stdout
+}
+
+export function numstatArgs(scope: DiffScope) {
+  return [...diffArgs(scope), "--numstat"]
+}
+
+export function nameStatusArgs(scope: DiffScope) {
+  return [...diffArgs(scope), "--name-status"]
+}
+
+export function diffArgs(scope: DiffScope) {
+  if (scope.kind === "staged") {
+    return ["git", "diff", "--cached", scope.ref]
+  }
+
+  if (scope.kind === "unstaged") {
+    return ["git", "diff"]
+  }
+
+  return ["git", "diff", scope.ref]
 }
 
 export function parsePorcelainStatus(output: string): Map<string, StageState> {
@@ -99,28 +135,11 @@ export function parsePorcelainStatus(output: string): Map<string, StageState> {
 }
 
 export function mergeModel(prev: GitModel, next: GitModel): GitModel {
-  if (prev.repoRoot === next.repoRoot && signature(prev.files) === signature(next.files)) {
+  if (prev.repoRoot === next.repoRoot && prev.scopeKey === next.scopeKey && prev.repoFilesKey === next.repoFilesKey && changedSignature(prev.changed) === changedSignature(next.changed)) {
     return prev
   }
 
-  const remaining = new Map(next.files.map((file) => [file.path, file]))
-  const files: ChangedFile[] = []
-
-  for (const file of prev.files) {
-    const updated = remaining.get(file.path)
-    if (updated !== undefined) {
-      files.push(updated)
-      remaining.delete(file.path)
-    }
-  }
-
-  for (const file of next.files) {
-    if (remaining.has(file.path)) {
-      files.push(file)
-    }
-  }
-
-  return { repoRoot: next.repoRoot, files }
+  return next
 }
 
 function stageFromCodes(index: string, worktree: string): StageState {
@@ -137,8 +156,36 @@ function stageFromCodes(index: string, worktree: string): StageState {
   return staged ? "staged" : "unstaged"
 }
 
-function signature(files: ChangedFile[]) {
+function changedSignature(files: ChangedFile[]) {
   return files.map((file) => `${file.path}\0${file.kind}\0${file.stage}\0${file.additions}\0${file.deletions}`).join("\x01")
+}
+
+let repoFilesCache: { key: string; repoFiles: RepoFile[] } | undefined
+
+function parseRepoFiles(trackedOutput: string, untrackedOutput: string, key: string): RepoFile[] {
+  if (repoFilesCache?.key === key) {
+    return repoFilesCache.repoFiles
+  }
+
+  const seen = new Set<string>()
+  const repoFiles: RepoFile[] = []
+
+  for (const path of trackedOutput.split("\0")) {
+    if (path !== "" && !seen.has(path)) {
+      seen.add(path)
+      repoFiles.push({ path, tracked: true })
+    }
+  }
+
+  for (const path of untrackedOutput.split("\0")) {
+    if (path !== "" && !seen.has(path)) {
+      seen.add(path)
+      repoFiles.push({ path, tracked: false })
+    }
+  }
+
+  repoFilesCache = { key, repoFiles }
+  return repoFiles
 }
 
 export function parseUntrackedFiles(output: string): StatusEntry[] {
@@ -189,30 +236,6 @@ export function parseNameStatus(output: string): StatusEntry[] {
     })
 }
 
-function numstatArgs(target: DiffTarget) {
-  if (target.kind === "staged") {
-    return ["git", "diff", "--cached", "--numstat", target.ref]
-  }
-
-  return ["git", "diff", "--numstat", target.ref]
-}
-
-function nameStatusArgs(target: DiffTarget) {
-  if (target.kind === "staged") {
-    return ["git", "diff", "--cached", "--name-status", target.ref]
-  }
-
-  return ["git", "diff", "--name-status", target.ref]
-}
-
-function diffArgs(target: DiffTarget) {
-  if (target.kind === "staged") {
-    return ["git", "diff", "--cached", target.ref]
-  }
-
-  return ["git", "diff", target.ref]
-}
-
 function inferKind(path: string, deletions: number, additions: number): ChangeKind {
   if (deletions > 0 && additions === 0) {
     return "deleted"
@@ -237,25 +260,6 @@ function normalizeNumstatPath(path: string) {
   }
 
   return path
-}
-
-function compareFiles(a: ChangedFile, b: ChangedFile) {
-  const warningDelta = b.warnings.length - a.warnings.length
-  if (warningDelta !== 0) {
-    return warningDelta
-  }
-
-  const deletionDelta = b.deletions - a.deletions
-  if (deletionDelta !== 0) {
-    return deletionDelta
-  }
-
-  const churnDelta = b.additions + b.deletions - (a.additions + a.deletions)
-  if (churnDelta !== 0) {
-    return churnDelta
-  }
-
-  return a.path.localeCompare(b.path)
 }
 
 function warningsFor(path: string, kind: ChangeKind, additions: number, deletions: number) {

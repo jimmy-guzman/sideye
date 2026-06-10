@@ -22,10 +22,10 @@ try {
     process.exit(0)
   }
 
-  const model = loadGitModel(process.cwd(), options.target)
+  const model = loadGitModel(process.cwd(), options.scope)
   const syntax = await createSyntaxConfig()
   const renderer = await createCliRenderer({ exitOnCtrlC: true })
-  createRoot(renderer).render(<App model={model} target={options.target} syntax={syntax} />)
+  createRoot(renderer).render(<App model={model} scope={options.scope} syntax={syntax} />)
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error))
   process.exit(1)

@@ -1,14 +1,14 @@
 {
-  "name": "ojo",
+  "name": "torre",
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "ojo": "./src/main.tsx"
+    "torre": "./src/main.tsx"
   },
   "scripts": {
-    "build": "bun build ./src/main.tsx --target bun --compile --outfile /private/tmp/ojo-build-check",
+    "build": "bun build ./src/main.tsx --target bun --compile --outfile /private/tmp/torre-build-check",
     "check": "bun test && bun run typecheck",
-    "ojo": "bun run src/main.tsx",
+    "torre": "bun run src/main.tsx",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },

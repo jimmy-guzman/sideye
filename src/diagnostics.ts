@@ -85,6 +85,75 @@ export function fileHasFindings(path: string, state: CheckerState) {
   return checkerNames.some((checker) => state[checker].get(path)?.status === "findings")
 }
 
+const severityRank = { error: 0, warning: 1, info: 2 } as const
+
+export function allFindings(state: CheckerState): Diagnostic[] {
+  const findings: Diagnostic[] = []
+  for (const checker of checkerNames) {
+    for (const fileState of state[checker].values()) {
+      findings.push(...fileState.diagnostics)
+    }
+  }
+
+  return findings.sort(
+    (a, b) => severityRank[a.severity] - severityRank[b.severity] || a.path.localeCompare(b.path) || (a.line ?? Number.MAX_SAFE_INTEGER) - (b.line ?? Number.MAX_SAFE_INTEGER),
+  )
+}
+
+export function globalCounts(state: CheckerState) {
+  let errors = 0
+  let warnings = 0
+  for (const checker of checkerNames) {
+    for (const fileState of state[checker].values()) {
+      for (const diagnostic of fileState.diagnostics) {
+        if (diagnostic.severity === "error") {
+          errors += 1
+        } else {
+          warnings += 1
+        }
+      }
+    }
+  }
+
+  return { errors, warnings }
+}
+
+export function problemCounts(path: string, state: CheckerState) {
+  let errors = 0
+  let warnings = 0
+  for (const checker of checkerNames) {
+    for (const diagnostic of state[checker].get(path)?.diagnostics ?? []) {
+      if (diagnostic.severity === "error") {
+        errors += 1
+      } else {
+        warnings += 1
+      }
+    }
+  }
+
+  return { errors, warnings }
+}
+
+export function findingsLineMap(path: string, state: CheckerState) {
+  const byLine = new Map<number, Diagnostic[]>()
+  for (const checker of checkerNames) {
+    for (const diagnostic of state[checker].get(path)?.diagnostics ?? []) {
+      if (diagnostic.line === undefined) {
+        continue
+      }
+
+      const existing = byLine.get(diagnostic.line)
+      if (existing === undefined) {
+        byLine.set(diagnostic.line, [diagnostic])
+      } else {
+        existing.push(diagnostic)
+      }
+    }
+  }
+
+  return byLine
+}
+
 export async function runDiagnostics(repoRoot: string, files: ChangedFile[], onCheckerDone: (checker: CheckerName, state: Map<string, CheckerFileState>) => void) {
   const commands = discoverCheckerCommands(repoRoot, files)
   await Promise.all(
@@ -244,7 +313,7 @@ function parseEslintJsonOrText(checker: CheckerName) {
   }
 }
 
-function stateForResolvedChecker(checker: CheckerName, files: ChangedFile[], diagnostics: Diagnostic[], repoRoot: string) {
+export function stateForResolvedChecker(checker: CheckerName, files: ChangedFile[], diagnostics: Diagnostic[], repoRoot: string) {
   const byPath = new Map<string, Diagnostic[]>()
   for (const diagnostic of diagnostics) {
     const path = relativize(diagnostic.path, repoRoot)
@@ -257,19 +326,19 @@ function stateForResolvedChecker(checker: CheckerName, files: ChangedFile[], dia
     }
   }
 
-  return new Map(
-    files.map((file) => {
-      const fileDiagnostics = byPath.get(file.path) ?? []
-      return [
-        file.path,
-        {
-          status: fileDiagnostics.length > 0 ? ("findings" as const) : ("clean" as const),
-          count: fileDiagnostics.length,
-          diagnostics: fileDiagnostics,
-        },
-      ]
-    }),
-  )
+  // keep findings for every reported path (tsc runs project-wide), not just changed files
+  const state = new Map<string, CheckerFileState>()
+  for (const [path, fileDiagnostics] of byPath) {
+    state.set(path, { status: "findings", count: fileDiagnostics.length, diagnostics: fileDiagnostics })
+  }
+
+  for (const file of files) {
+    if (!state.has(file.path)) {
+      state.set(file.path, { status: "clean", count: 0, diagnostics: [] })
+    }
+  }
+
+  return state
 }
 
 function stateForFailedChecker(files: ChangedFile[], message: string) {
