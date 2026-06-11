@@ -336,7 +336,7 @@ export function parseTypeScriptOutput(output: { stdout: string; stderr: string; 
 
   if (diagnostics.length === 0 && output.exitCode !== undefined && output.exitCode !== 0) {
     const text = `${output.stdout}\n${output.stderr}`.trim()
-    throw new Error(text === "" ? "typecheck failed without parseable diagnostics" : text.split("\n")[0])
+    throw new Error(text === "" ? "typecheck failed without parseable diagnostics" : text)
   }
 
   return diagnostics

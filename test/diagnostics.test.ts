@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtempSync, writeFileSync } from "node:fs"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
@@ -147,21 +147,30 @@ describe("diagnostic parsers", () => {
 describe("runDiagnostics", () => {
   async function lintStatuses(lintScript: string) {
     const dir = mkdtempSync(join(tmpdir(), "sideye-diagnostics-"))
-    writeFileSync(join(dir, "package.json"), JSON.stringify({ scripts: { lint: lintScript } }))
-    const states = new Map<string, Map<string, { status: string }>>()
-    await runDiagnostics(dir, [file], (checker, state) => {
-      states.set(checker, state)
-    })
-    return states.get("lint")
+    try {
+      writeFileSync(join(dir, "package.json"), JSON.stringify({ scripts: { lint: lintScript } }))
+      const states = new Map<string, Map<string, { status: string }>>()
+      await runDiagnostics(dir, [file], (checker, state) => {
+        states.set(checker, state)
+      })
+      return states.get("lint")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   }
 
   test("unconfigured checkers resolve as unavailable instead of clean or failed", async () => {
     // deleted-only changes leave no paths to lint or format
     const deleted: ChangedFile = { ...file, kind: "deleted" }
     const states = new Map<string, string>()
-    await runDiagnostics(mkdtempSync(join(tmpdir(), "sideye-diagnostics-")), [deleted], (checker, state) => {
-      states.set(checker, state.get("src/a.ts")?.status ?? "missing")
-    })
+    const dir = mkdtempSync(join(tmpdir(), "sideye-diagnostics-"))
+    try {
+      await runDiagnostics(dir, [deleted], (checker, state) => {
+        states.set(checker, state.get("src/a.ts")?.status ?? "missing")
+      })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
     expect(states.get("lint")).toBe("unavailable")
     expect(states.get("prettier")).toBe("unavailable")
   })

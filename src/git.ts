@@ -255,8 +255,9 @@ export function parseNumstat(output: string) {
 
     const [addedRaw = "0", deletedRaw = "0", ...pathParts] = token.split("\t")
     let path = pathParts.join("\t")
-    if (token.endsWith("\t")) {
-      // a rename record carries no inline path: "added\tdeleted\t" NUL old NUL new
+    // a rename record carries no inline path at all ("added\tdeleted\t" NUL old
+    // NUL new), unlike a path that merely ends with a tab
+    if (pathParts.length === 1 && pathParts[0] === "") {
       path = tokens[index + 2] ?? ""
       index += 2
     }

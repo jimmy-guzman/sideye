@@ -75,6 +75,10 @@ describe("parseNumstat", () => {
   test("keeps paths that contain tabs intact", () => {
     expect(parseNumstat("1\t0\tweird\tname.ts\0")).toEqual([{ path: "weird\tname.ts", additions: 1, deletions: 0, binary: false }])
   })
+
+  test("does not mistake a path ending in a tab for a rename record", () => {
+    expect(parseNumstat("1\t0\ttrailing\t\0")).toEqual([{ path: "trailing\t", additions: 1, deletions: 0, binary: false }])
+  })
 })
 
 describe("parseNameStatus", () => {
