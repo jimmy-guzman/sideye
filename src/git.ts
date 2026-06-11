@@ -1,5 +1,5 @@
-import { readFileSync, statSync } from "node:fs"
 import type { DiffScope } from "./cli"
+import { loadFileContent } from "./file-view"
 import { runCommand } from "./process"
 
 export type ChangeKind = "modified" | "added" | "deleted" | "renamed" | "untracked"
@@ -86,7 +86,9 @@ export function loadFileDiff(repoRoot: string, scope: DiffScope, file: ChangedFi
     return runCommand(["git", "diff", "--no-index", "--", "/dev/null", file.path], repoRoot, [0, 1]).stdout
   }
 
-  return runCommand([...diffArgs(scope), "--", file.path], repoRoot, [0, 1]).stdout
+  // the old path must be in the pathspec or git cannot pair the rename and shows a whole-file add
+  const pathspec = file.oldPath === undefined ? [file.path] : [file.oldPath, file.path]
+  return runCommand([...diffArgs(scope), "--", ...pathspec], repoRoot, [0, 1]).stdout
 }
 
 export function numstatArgs(scope: DiffScope) {
@@ -291,19 +293,11 @@ function warningsFor(path: string, kind: ChangeKind, additions: number, deletion
 }
 
 function statUntrackedFile(repoRoot: string, path: string) {
-  const absolutePath = `${repoRoot}/${path}`
-  const stat = statSync(absolutePath)
-
-  if (!stat.isFile() || stat.size > 1_000_000) {
-    return { additions: 0, binary: true }
+  // loadFileContent absorbs dangling symlinks and files deleted mid-scan as "missing"
+  const content = loadFileContent(repoRoot, path, { full: false })
+  if (content.kind === "text") {
+    return { additions: content.lineCount, binary: false }
   }
 
-  const buffer = readFileSync(absolutePath)
-  if (buffer.includes(0)) {
-    return { additions: 0, binary: true }
-  }
-
-  const content = buffer.toString("utf8")
-  const normalized = content.endsWith("\n") ? content.slice(0, -1) : content
-  return { additions: normalized === "" ? 0 : normalized.split("\n").length, binary: false }
+  return { additions: 0, binary: content.kind !== "missing" }
 }

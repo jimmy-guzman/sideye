@@ -140,7 +140,11 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       }),
     [fullContentPaths, selectedDiff, selectedPath, showFileContent],
   )
-  const navigableLines = useMemo(() => renderedPatch.parsed.hunks.flatMap((hunk) => hunk.lines), [renderedPatch])
+  // clamp navigation to the lines renderPatch actually emitted, not the full parse
+  const navigableLines = useMemo(
+    () => renderedPatch.parsed.hunks.flatMap((hunk) => hunk.lines).slice(0, renderedPatch.bodyLineCount),
+    [renderedPatch],
+  )
   const truncated = renderedPatch.truncated || (fileContent?.kind === "text" && fileContent.truncated)
 
   function runChecks() {

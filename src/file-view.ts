@@ -40,7 +40,13 @@ export function loadFileContent(repoRoot: string, path: string, options: LoadFil
     return { kind: "too-large", bytes: size }
   }
 
-  const buffer = readFileSync(absolutePath)
+  let buffer: Buffer
+  try {
+    buffer = readFileSync(absolutePath)
+  } catch {
+    return { kind: "missing" }
+  }
+
   if (buffer.subarray(0, 8_000).includes(0)) {
     return { kind: "binary" }
   }

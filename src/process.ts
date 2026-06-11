@@ -4,10 +4,17 @@ export type CommandResult = {
   stderr: string
 }
 
-export function runCommand(command: string[], cwd: string, allowedExitCodes = [0]) {
+function commandFailedError(command: string[], result: CommandResult) {
+  const rendered = command.map((part) => (part.includes(" ") ? JSON.stringify(part) : part)).join(" ")
+  const detail = result.stderr.trim() || result.stdout.trim()
+  return new Error(`${rendered} failed with exit ${result.exitCode}${detail === "" ? "" : `\n${detail}`}`)
+}
+
+export function runCommand(command: string[], cwd: string, allowedExitCodes = [0], stdin?: string) {
   const result = Bun.spawnSync({
     cmd: command,
     cwd,
+    ...(stdin === undefined ? {} : { stdin: new Blob([stdin]) }),
     stdout: "pipe",
     stderr: "pipe",
   })
@@ -19,9 +26,7 @@ export function runCommand(command: string[], cwd: string, allowedExitCodes = [0
   }
 
   if (!allowedExitCodes.includes(output.exitCode)) {
-    const rendered = command.map((part) => (part.includes(" ") ? JSON.stringify(part) : part)).join(" ")
-    const detail = output.stderr.trim() || output.stdout.trim()
-    throw new Error(`${rendered} failed with exit ${output.exitCode}${detail === "" ? "" : `\n${detail}`}`)
+    throw commandFailedError(command, output)
   }
 
   return output
@@ -44,9 +49,7 @@ export async function runCommandAsync(command: string[], cwd: string, allowedExi
   const result = { exitCode, stdout, stderr }
 
   if (!allowedExitCodes.includes(exitCode)) {
-    const rendered = command.map((part) => (part.includes(" ") ? JSON.stringify(part) : part)).join(" ")
-    const detail = stderr.trim() || stdout.trim()
-    throw new Error(`${rendered} failed with exit ${exitCode}${detail === "" ? "" : `\n${detail}`}`)
+    throw commandFailedError(command, result)
   }
 
   return result

@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import { renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { join } from "node:path"
 import {
   diffArgs,
+  loadFileDiff,
+  loadGitModel,
   mergeModel,
   nameStatusArgs,
   numstatArgs,
@@ -11,6 +15,7 @@ import {
   type ChangedFile,
   type GitModel,
 } from "../src/git"
+import { createFixtureRepo, runGit } from "../test/helpers"
 
 function file(path: string, overrides: Partial<ChangedFile> = {}): ChangedFile {
   return { path, kind: "modified", stage: "unstaged", additions: 1, deletions: 0, binary: false, warnings: [], ...overrides }
@@ -93,6 +98,44 @@ describe("parsePorcelainStatus", () => {
     expect(stages.get("new.ts")).toBe("staged")
     expect(stages.get("old.ts")).toBe("staged")
     expect(stages.get("after.ts")).toBe("unstaged")
+  })
+})
+
+describe("loadGitModel in a fixture repo", () => {
+  test("survives a dangling untracked symlink instead of crashing", () => {
+    const repoRoot = createFixtureRepo("sideye-git-symlink-", { "a.ts": "const a = 1\n" })
+    try {
+      symlinkSync("/nonexistent-target", join(repoRoot, "broken-link"))
+      const loaded = loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
+      expect(loaded.changedByPath.get("broken-link")).toMatchObject({ kind: "untracked", additions: 0 })
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true })
+    }
+  })
+
+  test("diffs a rename as a rename, not a whole-file add", () => {
+    const content = Array.from({ length: 12 }, (_, index) => `const line${index} = ${index}`).join("\n")
+    const repoRoot = createFixtureRepo("sideye-git-rename-", { "src/old.ts": `${content}\n` })
+    try {
+      renameSync(join(repoRoot, "src", "old.ts"), join(repoRoot, "src", "new.ts"))
+      writeFileSync(join(repoRoot, "src", "new.ts"), `${content}\nconst added = true\n`)
+      runGit(repoRoot, ["add", "-A"])
+
+      const scope = { kind: "all", ref: "HEAD" } as const
+      const loaded = loadGitModel(repoRoot, scope)
+      const renamed = loaded.changedByPath.get("src/new.ts")
+      expect(renamed).toMatchObject({ kind: "renamed", oldPath: "src/old.ts" })
+      if (renamed === undefined) {
+        throw new Error("renamed file missing from model")
+      }
+
+      const diff = loadFileDiff(loaded.repoRoot, scope, renamed)
+      const addedLines = diff.split("\n").filter((line) => line.startsWith("+") && !line.startsWith("+++"))
+      expect(diff).toContain("rename from src/old.ts")
+      expect(addedLines).toEqual(["+const added = true"])
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true })
+    }
   })
 })
 

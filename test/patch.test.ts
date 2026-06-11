@@ -47,4 +47,10 @@ describe("parsePatch", () => {
     expect(full.diff).toContain("const c = 4")
     expect(renderPatch(diff, { full: false, maxLines: 1 }).truncated).toBe(true)
   })
+
+  test("reports how many body lines were emitted so navigation can clamp to them", () => {
+    expect(renderPatch(diff, { full: true, maxLines: 1 }).bodyLineCount).toBe(5)
+    expect(renderPatch(diff, { full: false, maxLines: 2 }).bodyLineCount).toBe(2)
+    expect(renderPatch("not a diff", { full: false, maxLines: 2 }).bodyLineCount).toBe(0)
+  })
 })

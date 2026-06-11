@@ -86,7 +86,7 @@ export function lineReference(path: string, line: ParsedDiffLine): CopyReference
 export function renderPatch(diff: string, options: { full: boolean; maxLines: number }) {
   const parsed = parsePatch(diff)
   if (parsed.hunks.length === 0) {
-    return { diff, truncated: false, parsed }
+    return { diff, truncated: false, parsed, bodyLineCount: 0 }
   }
 
   const lines: string[] = [...parsed.header]
@@ -116,5 +116,5 @@ export function renderPatch(diff: string, options: { full: boolean; maxLines: nu
     }
   }
 
-  return { diff: lines.join("\n"), truncated, parsed }
+  return { diff: lines.join("\n"), truncated, parsed, bodyLineCount: emittedBodyLines }
 }

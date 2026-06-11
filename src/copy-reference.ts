@@ -1,3 +1,5 @@
+import { runCommand } from "./process"
+
 export type CopyReferencePayload = {
   path: string
   line?: number
@@ -17,16 +19,21 @@ export function formatCopyReference(payload: CopyReferencePayload) {
   return `${reference}\n${payload.snippet}`
 }
 
-export function copyToClipboard(text: string) {
-  const process = Bun.spawnSync({
-    cmd: ["/usr/bin/pbcopy"],
-    stdin: new Blob([text]),
-    stdout: "pipe",
-    stderr: "pipe",
-  })
+const LINUX_CLIPBOARD_COMMANDS = [["wl-copy"], ["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]]
 
-  if (process.exitCode !== 0) {
-    const stderr = new TextDecoder().decode(process.stderr)
-    throw new Error(stderr.trim() === "" ? "pbcopy failed" : stderr.trim())
+export function clipboardCommand() {
+  if (process.platform === "darwin") {
+    return ["pbcopy"]
   }
+
+  return LINUX_CLIPBOARD_COMMANDS.find((command) => Bun.which(command[0] ?? "") !== null)
+}
+
+export function copyToClipboard(text: string) {
+  const command = clipboardCommand()
+  if (command === undefined) {
+    throw new Error("no clipboard tool found; install wl-copy, xclip, or xsel")
+  }
+
+  runCommand(command, process.cwd(), [0], text)
 }
