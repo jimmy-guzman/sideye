@@ -119,7 +119,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
 
   function runChecks() {
     setCheckerState(initialCheckerState(model.changed))
-    void runDiagnostics(model.repoRoot, model.changed, (checker, nextState) => {
+    return runDiagnostics(model.repoRoot, model.changed, (checker, nextState) => {
       setCheckerState((current) => ({ ...current, [checker]: nextState }))
     })
   }
@@ -404,8 +404,10 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     }
 
     if (key.name === "r") {
-      runChecks()
       setStatus("re-running checks")
+      void runChecks().then(() => {
+        setStatus((current) => current === "re-running checks" ? "checks finished" : current)
+      })
       return
     }
 
