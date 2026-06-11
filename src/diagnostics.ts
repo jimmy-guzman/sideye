@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs"
+import { isAbsolute, join } from "node:path"
 import type { ChangedFile } from "./git"
 import { runCommandAsync } from "./process"
 
@@ -181,7 +182,7 @@ export async function runDiagnostics(
               const diagnostics = command.parser(result)
               for (const d of diagnostics) {
                 // resolve paths from per-package cwd to absolute so stateForResolvedChecker can relativize them
-                const resolvedPath = command.cwd !== undefined && !d.path.startsWith("/") ? `${command.cwd}/${d.path}` : d.path
+                const resolvedPath = command.cwd !== undefined && !isAbsolute(d.path) ? join(command.cwd, d.path) : d.path
                 allDiagnostics.push({ ...d, path: resolvedPath })
               }
             } catch (error) {
@@ -325,7 +326,14 @@ function discoverWorkspaceTypechecks(repoRoot: string, packageJson: PackageJson 
 
 function getWorkspacePatterns(repoRoot: string, packageJson: PackageJson | undefined): string[] {
   const ws = packageJson?.workspaces
-  const fromPackageJson: string[] = ws === undefined ? [] : Array.isArray(ws) ? ws : ((ws as { packages: string[] }).packages ?? [])
+  const fromPackageJson: string[] =
+    ws === undefined
+      ? []
+      : Array.isArray(ws)
+        ? ws
+        : Array.isArray((ws as { packages?: unknown }).packages)
+          ? (ws as { packages: string[] }).packages
+          : []
   return [...fromPackageJson, ...getPnpmWorkspacePatterns(repoRoot)]
 }
 
@@ -340,6 +348,7 @@ function getPnpmWorkspacePatterns(repoRoot: string): string[] {
     .map((line) =>
       line
         .replace(/^\s*-\s*/, "")
+        .replace(/#.*$/, "")
         .replace(/^['"]|['"]$/g, "")
         .trim(),
     )
@@ -350,16 +359,16 @@ function expandWorkspacePatterns(repoRoot: string, patterns: string[]): string[]
   const dirs: string[] = []
   for (const pattern of patterns) {
     if (pattern.endsWith("/*")) {
-      const base = `${repoRoot}/${pattern.slice(0, -2)}`
+      const base = join(repoRoot, pattern.slice(0, -2))
       if (existsSync(base)) {
         for (const entry of readdirSync(base, { withFileTypes: true })) {
           if (entry.isDirectory()) {
-            dirs.push(`${base}/${entry.name}`)
+            dirs.push(join(base, entry.name))
           }
         }
       }
     } else if (!pattern.includes("*")) {
-      const dir = `${repoRoot}/${pattern}`
+      const dir = join(repoRoot, pattern)
       if (existsSync(dir)) {
         dirs.push(dir)
       }

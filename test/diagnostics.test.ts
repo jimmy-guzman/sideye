@@ -200,7 +200,7 @@ function makeWorkspace(packages: { name: string; hasTypecheck?: boolean; hasTsco
     mkdirSync(pkgDir)
     const scripts: Record<string, string> = {}
     if (pkg.hasTypecheck === true) {
-      scripts.typecheck = `echo "packages/${pkg.name}/src/a.ts(1,1): error TS2322: type error" && exit 1`
+      scripts.typecheck = `echo "src/a.ts(1,1): error TS2322: type error" && exit 1`
     }
     writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ scripts }))
     if (pkg.hasTsconfig === true) {
