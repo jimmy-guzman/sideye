@@ -1,19 +1,6 @@
-const supportedFiletypes = new Map([
-  [".ts", "typescript"],
-  [".tsx", "typescript"],
-  [".js", "javascript"],
-  [".jsx", "javascript"],
-  [".sh", "bash"],
-  [".bash", "bash"],
-  [".zsh", "bash"],
-  [".json", "json"],
-  [".jsonc", "json"],
-  [".yaml", "yaml"],
-  [".yml", "yaml"],
-  [".md", "markdown"],
-  [".mdx", "markdown"],
-  [".zig", "zig"],
-])
+import { languages } from "./languages"
+
+const filetypeByExtension = new Map(languages.flatMap((language) => language.extensions.map((extension) => [extension, language.filetype])))
 
 export function supportedFiletypeFor(path: string) {
   const match = path.match(/\.[^.]+$/)
@@ -21,7 +8,7 @@ export function supportedFiletypeFor(path: string) {
     return undefined
   }
 
-  return supportedFiletypes.get(match[0])
+  return filetypeByExtension.get(match[0])
 }
 
 export function filetypeFor(path: string) {

@@ -1,8 +1,8 @@
-import { getTreeSitterClient } from "@opentui/core"
+import { SyntaxStyle, getTreeSitterClient } from "@opentui/core"
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { diffFiletypeFor, sideyeSyntaxStyle, type SyntaxConfig } from "../src/syntax"
+import { baseCaptureStyles, diffFiletypeFor, expandCaptureStyles, type SyntaxConfig } from "../src/syntax"
 
 const disabledSyntax: SyntaxConfig = {
   enabled: false,
@@ -12,7 +12,7 @@ const disabledSyntax: SyntaxConfig = {
 const enabledSyntax: SyntaxConfig = {
   enabled: true,
   status: "syntax highlighting ready",
-  style: sideyeSyntaxStyle,
+  style: SyntaxStyle.fromStyles(baseCaptureStyles),
   treeSitterClient: getTreeSitterClient(),
 }
 
@@ -33,7 +33,25 @@ describe("diffFiletypeFor", () => {
   })
 })
 
-describe("sideyeSyntaxStyle capture coverage", () => {
+describe("expandCaptureStyles", () => {
+  test("aliases an unknown dotted capture to its longest styled prefix", () => {
+    const expanded = expandCaptureStyles(["(import_statement) @keyword.import"])
+    expect(expanded["keyword.import"]).toEqual(baseCaptureStyles["keyword"])
+  })
+
+  test("prefers a longer prefix over the first segment", () => {
+    const expanded = expandCaptureStyles(["(link) @markup.link.url"])
+    expect(expanded["markup.link.url"]).toEqual(baseCaptureStyles["markup.link"])
+    expect(expanded["markup.link.url"]).not.toEqual(baseCaptureStyles["markup"])
+  })
+
+  test("never overrides an explicit theme entry", () => {
+    const expanded = expandCaptureStyles(["(heading) @markup.heading.1"])
+    expect(expanded["markup.heading.1"]).toEqual(baseCaptureStyles["markup.heading.1"])
+  })
+})
+
+describe("capture coverage", () => {
   const repoRoot = join(import.meta.dir, "..")
   const queryFiles = [
     join(repoRoot, "assets/tree-sitter/bash/highlights.scm"),
@@ -50,22 +68,25 @@ describe("sideyeSyntaxStyle capture coverage", () => {
   // meta captures that intentionally carry no style of their own
   const metaCaptures = new Set(["spell", "nospell", "conceal", "none", "embedded", "cImport", "import", "_lang", ""])
 
-  // style resolution is exact name -> first dotted segment -> default, so
-  // every dotted capture a grammar emits must resolve without hitting default
-  test("every emitted capture resolves to a registered style", () => {
+  // after expansion every capture a grammar emits must have an exact entry,
+  // because OpenTUI's fallback (first dotted segment) loses specificity
+  test("every emitted capture resolves to an exact expanded style", () => {
+    const sources = queryFiles.map((file) => readFileSync(file, "utf8"))
+    const expanded = expandCaptureStyles(sources)
     const unresolved: string[] = []
-    for (const file of queryFiles) {
-      const scm = readFileSync(file, "utf8")
-      const captures = new Set((scm.match(/@[\w.]*/g) ?? []).map((capture) => capture.slice(1)))
+
+    for (const [index, source] of sources.entries()) {
+      const captures = new Set((source.match(/@[\w.]*/g) ?? []).map((capture) => capture.slice(1)))
       for (const capture of captures) {
-        if (metaCaptures.has(capture)) {
+        if (metaCaptures.has(capture) || capture.startsWith("_")) {
           continue
         }
-        if (sideyeSyntaxStyle.getStyle(capture) === undefined) {
-          unresolved.push(`@${capture} (${file})`)
+        if (expanded[capture] === undefined) {
+          unresolved.push(`@${capture} (${queryFiles[index]})`)
         }
       }
     }
+
     expect(unresolved).toEqual([])
   })
 })
