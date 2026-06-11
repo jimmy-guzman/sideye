@@ -114,6 +114,9 @@ export function mergeChanged(prev: GitModel, next: Pick<GitModel, "changed" | "c
     return before !== undefined && sameChangedFile(before, file) ? before : file
   })
 
+  // If every entry in changed is the same reference as next.changed[index], no
+  // file was reused from prev — skip building a new Map and return next's
+  // references directly.
   if (prev.scopeKey === next.scopeKey && changed.every((file, index) => file === next.changed[index])) {
     return { ...prev, scopeKey: next.scopeKey, changed: next.changed, changedByPath: next.changedByPath }
   }
