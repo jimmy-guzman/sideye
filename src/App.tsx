@@ -6,6 +6,7 @@ import { nextScope, scopeLabel, type DiffScope } from "./cli"
 import { copyToClipboard, formatCopyReference } from "./copy-reference"
 import {
   allFindings,
+  checkerNames,
   checkerSummary,
   countBySeverity,
   findingsLineMap,
@@ -102,6 +103,18 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const treeRows = useMemo(() => flattenTree(tree, expandedDirectories), [expandedDirectories, tree])
   const problems = useMemo(() => allFindings(checkerState), [checkerState])
   const counts = useMemo(() => countBySeverity(problems), [problems])
+  const checkerFailures = useMemo(
+    () =>
+      checkerNames.flatMap((checker) => {
+        for (const [, fileState] of checkerState[checker]) {
+          if (fileState.status === "failed" && fileState.message !== undefined) {
+            return [{ checker, message: fileState.message }]
+          }
+        }
+        return []
+      }),
+    [checkerState],
+  )
   const recencyByPath = useMemo(() => lastChangedAt(activityLog), [activityLog])
   const changedPathSet = useMemo(() => new Set(model.changedByPath.keys()), [model.changedByPath])
   // hoisted out of paletteResults so a keystroke only pays for ranking
@@ -792,27 +805,49 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
           borderColor={focusedPane === "problems" ? "#ff4fb8" : "#27272a"}
         >
           <scrollbox ref={problemsRef} width="100%" height={PROBLEMS_HEIGHT - 2} scrollY viewportCulling>
-            {problems.length === 0 ? (
+            {checkerFailures.length === 0 && problems.length === 0 ? (
               <box id="problem-empty" paddingLeft={1}>
                 <text fg="#71717a">no problems</text>
               </box>
             ) : (
-              problems.map((problem, index) => (
-                <box
-                  key={`problem-${index}`}
-                  id={`problem-${index}`}
-                  width="100%"
-                  flexDirection="row"
-                  paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor={index === problemIndex && focusedPane === "problems" ? CURSOR_BG_HEX : "#09090b"}
-                >
-                  <text fg={problem.severity === "error" ? "#ff5c8a" : "#fbbf24"}>{problem.severity === "error" ? "✖ " : "⚠ "}</text>
-                  <text fg="#d4d4d8">{`${problem.path}${problem.line === undefined ? "" : `:${problem.line}`} `}</text>
-                  <text fg="#a1a1aa">{problem.message}</text>
-                  <text fg="#71717a">{`  [${problem.checker}]`}</text>
-                </box>
-              ))
+              <>
+                {checkerFailures.flatMap(({ checker, message }, fi) =>
+                  message
+                    .split("\n")
+                    .filter((line) => line.trim() !== "")
+                    .map((line, li) => (
+                      <box
+                        key={`failure-${fi}-${li}`}
+                        id={`failure-${fi}-${li}`}
+                        width="100%"
+                        flexDirection="row"
+                        paddingLeft={1}
+                        paddingRight={1}
+                        backgroundColor="#09090b"
+                      >
+                        <text fg="#ff5c8a">{li === 0 ? "✖ " : "  "}</text>
+                        <text fg="#a1a1aa">{line}</text>
+                        {li === 0 && <text fg="#71717a">{`  [${checker}]`}</text>}
+                      </box>
+                    )),
+                )}
+                {problems.map((problem, index) => (
+                  <box
+                    key={`problem-${index}`}
+                    id={`problem-${index}`}
+                    width="100%"
+                    flexDirection="row"
+                    paddingLeft={1}
+                    paddingRight={1}
+                    backgroundColor={index === problemIndex && focusedPane === "problems" ? CURSOR_BG_HEX : "#09090b"}
+                  >
+                    <text fg={problem.severity === "error" ? "#ff5c8a" : "#fbbf24"}>{problem.severity === "error" ? "✖ " : "⚠ "}</text>
+                    <text fg="#d4d4d8">{`${problem.path}${problem.line === undefined ? "" : `:${problem.line}`} `}</text>
+                    <text fg="#a1a1aa">{problem.message}</text>
+                    <text fg="#71717a">{`  [${problem.checker}]`}</text>
+                  </box>
+                ))}
+              </>
             )}
           </scrollbox>
         </box>

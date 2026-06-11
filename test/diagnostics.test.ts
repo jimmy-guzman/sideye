@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   allFindings,
   checkerSummary,
   countBySeverity,
+  discoverCheckerCommands,
   findingsLineMap,
   initialCheckerState,
   parseLintOutput,
@@ -187,5 +188,91 @@ describe("runDiagnostics", () => {
     const lint = await lintStatuses("echo problems found && exit 1")
     expect(lint?.get("src/a.ts")?.status).toBe("clean")
     expect(lint?.get("")?.status).toBe("findings")
+  })
+})
+
+function makeWorkspace(packages: { name: string; hasTypecheck?: boolean; hasTsconfig?: boolean }[]) {
+  const dir = mkdtempSync(join(tmpdir(), "sideye-workspace-"))
+  writeFileSync(join(dir, "package.json"), JSON.stringify({ workspaces: ["packages/*"] }))
+  mkdirSync(join(dir, "packages"))
+  for (const pkg of packages) {
+    const pkgDir = join(dir, "packages", pkg.name)
+    mkdirSync(pkgDir)
+    const scripts: Record<string, string> = {}
+    if (pkg.hasTypecheck === true) {
+      scripts.typecheck = `echo "packages/${pkg.name}/src/a.ts(1,1): error TS2322: type error" && exit 1`
+    }
+    writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ scripts }))
+    if (pkg.hasTsconfig === true) {
+      writeFileSync(join(pkgDir, "tsconfig.json"), JSON.stringify({ compilerOptions: {} }))
+    }
+  }
+  return dir
+}
+
+describe("workspace typecheck discovery", () => {
+  test("discovers only the package containing changed files", () => {
+    const dir = makeWorkspace([
+      { name: "core", hasTsconfig: true },
+      { name: "ui", hasTsconfig: true },
+    ])
+    try {
+      const coreFile: ChangedFile = { ...file, path: "packages/core/src/a.ts" }
+      const commands = discoverCheckerCommands(dir, [coreFile]).filter((c) => c.checker === "typecheck")
+      expect(commands).toHaveLength(1)
+      expect(commands[0].cwd).toBe(join(dir, "packages", "core"))
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("merges diagnostics from multiple affected packages with normalized paths", async () => {
+    const dir = makeWorkspace([
+      { name: "core", hasTypecheck: true },
+      { name: "ui", hasTypecheck: true },
+    ])
+    try {
+      const files: ChangedFile[] = [
+        { ...file, path: "packages/core/src/a.ts" },
+        { ...file, path: "packages/ui/src/a.ts" },
+      ]
+      const states = new Map<string, Map<string, { status: string; diagnostics: Diagnostic[] }>>()
+      await runDiagnostics(dir, files, (checker, state) => {
+        states.set(checker, state as Map<string, { status: string; diagnostics: Diagnostic[] }>)
+      })
+      const typecheck = states.get("typecheck")
+      // both packages reported errors; paths should be monorepo-relative
+      const allPaths = [...(typecheck?.keys() ?? [])]
+      expect(allPaths).toContain("packages/core/src/a.ts")
+      expect(allPaths).toContain("packages/ui/src/a.ts")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("reports unavailable when no workspace packages contain changed files", () => {
+    const dir = makeWorkspace([{ name: "core", hasTsconfig: true }])
+    try {
+      const otherFile: ChangedFile = { ...file, path: "docs/readme.md" }
+      const commands = discoverCheckerCommands(dir, [otherFile]).filter((c) => c.checker === "typecheck")
+      expect(commands).toHaveLength(1)
+      expect(commands[0].command).toBeUndefined()
+      expect(commands[0].unavailableMessage).toContain("no workspace packages contain changed files")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("reports unavailable when no tsconfig.json at root and no workspaces configured", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sideye-noconfig-"))
+    try {
+      writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "myapp" }))
+      const commands = discoverCheckerCommands(dir, [file]).filter((c) => c.checker === "typecheck")
+      expect(commands).toHaveLength(1)
+      expect(commands[0].command).toBeUndefined()
+      expect(commands[0].unavailableMessage).toContain("no tsconfig.json at repo root")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
