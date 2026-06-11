@@ -1,4 +1,6 @@
 import { SyntaxStyle, getTreeSitterClient, type TreeSitterClient } from "@opentui/core"
+import bashHighlights from "../assets/tree-sitter/bash/highlights.scm" with { type: "file" }
+import bashWasm from "../assets/tree-sitter/bash/tree-sitter-bash.wasm" with { type: "file" }
 import jsonHighlights from "../assets/tree-sitter/json/highlights.scm" with { type: "file" }
 import jsonWasm from "../assets/tree-sitter/json/tree-sitter-json.wasm" with { type: "file" }
 import yamlHighlights from "../assets/tree-sitter/yaml/highlights.scm" with { type: "file" }
@@ -45,6 +47,7 @@ export const sideyeSyntaxStyle = SyntaxStyle.fromStyles({
 export async function createSyntaxConfig(): Promise<SyntaxConfig> {
   try {
     const treeSitterClient = getTreeSitterClient()
+    treeSitterClient.addFiletypeParser({ filetype: "bash", queries: { highlights: [bashHighlights] }, wasm: bashWasm })
     treeSitterClient.addFiletypeParser({ filetype: "json", queries: { highlights: [jsonHighlights] }, wasm: jsonWasm })
     treeSitterClient.addFiletypeParser({ filetype: "yaml", queries: { highlights: [yamlHighlights] }, wasm: yamlWasm })
     await treeSitterClient.initialize()

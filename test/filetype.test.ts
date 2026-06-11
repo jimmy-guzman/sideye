@@ -13,6 +13,9 @@ describe("supportedFiletypeFor", () => {
   })
 
   test("returns vendored parser filetypes", () => {
+    expect(supportedFiletypeFor("install.sh")).toBe("bash")
+    expect(supportedFiletypeFor("scripts/setup.bash")).toBe("bash")
+    expect(supportedFiletypeFor(".zshrc.zsh")).toBe("bash")
     expect(supportedFiletypeFor("package.json")).toBe("json")
     expect(supportedFiletypeFor("tsconfig.jsonc")).toBe("json")
     expect(supportedFiletypeFor(".github/workflows/ci.yml")).toBe("yaml")
