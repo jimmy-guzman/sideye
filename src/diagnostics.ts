@@ -274,7 +274,7 @@ function typecheckCommand(repoRoot: string, packageJson: PackageJson | undefined
 }
 
 function discoverWorkspaceTypechecks(repoRoot: string, packageJson: PackageJson | undefined, changedPaths: string[]): CheckerCommand[] {
-  const workspaces = getWorkspacePatterns(packageJson)
+  const workspaces = getWorkspacePatterns(repoRoot, packageJson)
   if (workspaces.length === 0) {
     return [
       {
@@ -323,12 +323,27 @@ function discoverWorkspaceTypechecks(repoRoot: string, packageJson: PackageJson 
   return commands
 }
 
-function getWorkspacePatterns(packageJson: PackageJson | undefined): string[] {
+function getWorkspacePatterns(repoRoot: string, packageJson: PackageJson | undefined): string[] {
   const ws = packageJson?.workspaces
-  if (ws === undefined) return []
-  if (Array.isArray(ws)) return ws
-  if (typeof ws === "object" && ws !== null && "packages" in ws) return (ws as { packages: string[] }).packages
-  return []
+  const fromPackageJson: string[] = ws === undefined ? [] : Array.isArray(ws) ? ws : ((ws as { packages: string[] }).packages ?? [])
+  return [...fromPackageJson, ...getPnpmWorkspacePatterns(repoRoot)]
+}
+
+function getPnpmWorkspacePatterns(repoRoot: string): string[] {
+  const path = `${repoRoot}/pnpm-workspace.yaml`
+  if (!existsSync(path)) return []
+  const text = readFileSync(path, "utf8")
+  const match = text.match(/^packages:\s*\n((?:[ \t]+-[^\n]*\n?)+)/m)
+  if (match === null) return []
+  return match[1]
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/^\s*-\s*/, "")
+        .replace(/^['"]|['"]$/g, "")
+        .trim(),
+    )
+    .filter((line) => line !== "")
 }
 
 function expandWorkspacePatterns(repoRoot: string, patterns: string[]): string[] {

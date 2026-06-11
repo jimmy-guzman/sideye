@@ -263,6 +263,25 @@ describe("workspace typecheck discovery", () => {
     }
   })
 
+  test("discovers packages from pnpm-workspace.yaml", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sideye-pnpm-"))
+    try {
+      writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "myapp" }))
+      writeFileSync(join(dir, "pnpm-workspace.yaml"), "packages:\n  - 'packages/*'\n")
+      mkdirSync(join(dir, "packages"))
+      const pkgDir = join(dir, "packages", "core")
+      mkdirSync(pkgDir)
+      writeFileSync(join(pkgDir, "package.json"), JSON.stringify({}))
+      writeFileSync(join(pkgDir, "tsconfig.json"), JSON.stringify({ compilerOptions: {} }))
+      const coreFile: ChangedFile = { ...file, path: "packages/core/src/a.ts" }
+      const commands = discoverCheckerCommands(dir, [coreFile]).filter((c) => c.checker === "typecheck")
+      expect(commands).toHaveLength(1)
+      expect(commands[0].cwd).toBe(pkgDir)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   test("reports unavailable when no tsconfig.json at root and no workspaces configured", () => {
     const dir = mkdtempSync(join(tmpdir(), "sideye-noconfig-"))
     try {
