@@ -5,7 +5,6 @@ export type FileNode = {
   id: string
   name: string
   path: string
-  depth: number
   tracked: boolean
   changed: ChangedFile | undefined
 }
@@ -15,7 +14,6 @@ export type DirectoryNode = {
   id: string
   name: string
   path: string
-  depth: number
   additions: number
   deletions: number
   fileCount: number
@@ -29,6 +27,7 @@ export type FileTreeNode = DirectoryNode | FileNode
 export type FileTreeRow = {
   node: FileTreeNode
   index: number
+  depth: number
 }
 
 export type BuildTreeOptions = {
@@ -68,7 +67,6 @@ export function buildFileTree(repoFiles: RepoFile[], changedByPath: Map<string, 
       id: `file:${path}`,
       name: parts.at(-1) ?? path,
       path,
-      depth: 0,
       tracked,
       changed,
     })
@@ -88,12 +86,7 @@ export function buildFileTree(repoFiles: RepoFile[], changedByPath: Map<string, 
 
   aggregateDirectory(root)
   sortTree(root)
-  const children = root.children.map(flattenSingleChildChains)
-  for (const child of children) {
-    assignDepths(child, 0)
-  }
-
-  return children
+  return root.children.map(flattenSingleChildChains)
 }
 
 export function defaultExpandedDirectories(changedPaths: string[]) {
@@ -119,18 +112,18 @@ export function expandAncestorsForPath(expanded: Set<string>, path: string) {
 export function flattenTree(nodes: FileTreeNode[], expanded: Set<string>) {
   const rows: FileTreeRow[] = []
 
-  const visit = (node: FileTreeNode) => {
-    rows.push({ node, index: rows.length })
+  const visit = (node: FileTreeNode, depth: number) => {
+    rows.push({ node, index: rows.length, depth })
 
     if (node.type === "directory" && expanded.has(node.id)) {
       for (const child of node.children) {
-        visit(child)
+        visit(child, depth + 1)
       }
     }
   }
 
   for (const node of nodes) {
-    visit(node)
+    visit(node, 0)
   }
 
   return rows
@@ -161,7 +154,6 @@ function makeDirectory(name: string, path: string): DirectoryNode {
     id: `dir:${path}`,
     name,
     path,
-    depth: 0,
     additions: 0,
     deletions: 0,
     fileCount: 0,
@@ -237,14 +229,4 @@ function flattenSingleChildChains(node: FileTreeNode): FileTreeNode {
   }
 
   return { ...current, children: current.children.map(flattenSingleChildChains) }
-}
-
-function assignDepths(node: FileTreeNode, depth: number) {
-  node.depth = depth
-
-  if (node.type === "directory") {
-    for (const child of node.children) {
-      assignDepths(child, depth + 1)
-    }
-  }
 }

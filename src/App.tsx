@@ -1,6 +1,6 @@
 import { RGBA, type DiffRenderable, type LineColorConfig, type ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { emptyActivityLog, lastChangedAt, latestActivity, recordActivity, recencyLevel, RECENT_MS, type RecencyLevel } from "./activity"
 import { nextScope, scopeLabel, type DiffScope } from "./cli"
 import { copyToClipboard, formatCopyReference } from "./copy-reference"
@@ -47,9 +47,12 @@ type JumpTarget = { path: string; line: number; escalate: boolean }
 
 const DIFF_ID = "sideye-diff"
 const PROBLEMS_HEIGHT = 10
-const CURSOR_BG = RGBA.fromHex("#3a1530")
-const ADDED_BG = RGBA.fromHex("#102a1c")
-const REMOVED_BG = RGBA.fromHex("#32131f")
+const CURSOR_BG_HEX = "#3a1530"
+const ADDED_BG_HEX = "#102a1c"
+const REMOVED_BG_HEX = "#32131f"
+const CURSOR_BG = RGBA.fromHex(CURSOR_BG_HEX)
+const ADDED_BG = RGBA.fromHex(ADDED_BG_HEX)
+const REMOVED_BG = RGBA.fromHex(REMOVED_BG_HEX)
 const ERROR_GUTTER = RGBA.fromHex("#52141f")
 const WARNING_GUTTER = RGBA.fromHex("#4a3a10")
 const TRANSPARENT = RGBA.fromValues(0, 0, 0, 0)
@@ -102,14 +105,19 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const problems = useMemo(() => allFindings(checkerState), [checkerState])
   const counts = useMemo(() => countBySeverity(problems), [problems])
   const recencyByPath = useMemo(() => lastChangedAt(activityLog), [activityLog])
+  const changedPathSet = useMemo(() => new Set(model.changedByPath.keys()), [model.changedByPath])
+  // hoisted out of paletteResults so a keystroke only pays for ranking
+  const allPaths = useMemo(
+    () => [...new Set([...model.repoFiles.map((file) => file.path), ...model.changedByPath.keys()])],
+    [model.changedByPath, model.repoFiles],
+  )
   const paletteResults = useMemo(() => {
     if (!paletteOpen) {
       return []
     }
 
-    const paths = [...new Set([...model.repoFiles.map((file) => file.path), ...model.changedByPath.keys()])]
-    return rankFiles(paletteQuery, paths, { lastChangedAt: recencyByPath, changed: new Set(model.changedByPath.keys()), limit: 50 })
-  }, [model.changedByPath, model.repoFiles, paletteOpen, paletteQuery, recencyByPath])
+    return rankFiles(paletteQuery, allPaths, { lastChangedAt: recencyByPath, changed: changedPathSet, limit: 50 })
+  }, [allPaths, changedPathSet, paletteOpen, paletteQuery, recencyByPath])
   const lineMap = useMemo(
     () => (selectedPath === undefined ? new Map<number, Diagnostic[]>() : findingsLineMap(selectedPath, checkerState)),
     [checkerState, selectedPath],
@@ -362,6 +370,31 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   // the viewer pane spends one extra row on its path header
   const viewerHeight = Math.max(1, paneHeight - 1)
 
+  // the add/remove/diagnostic tints only change with the content, so a cursor
+  // move just copies this map and overlays the cursor row
+  const baseLineColors = useMemo(() => {
+    const colors = new Map<number, LineColorConfig>()
+    navigableLines.forEach((line, index) => {
+      let gutter = TRANSPARENT
+      let content = TRANSPARENT
+      if (line.type === "add") {
+        content = ADDED_BG
+      } else if (line.type === "remove") {
+        content = REMOVED_BG
+      }
+
+      const findings = line.newLine === undefined ? undefined : lineMap.get(line.newLine)
+      if (findings !== undefined) {
+        gutter = findings.some((finding) => finding.severity === "error") ? ERROR_GUTTER : WARNING_GUTTER
+      }
+
+      if (gutter !== TRANSPARENT || content !== TRANSPARENT) {
+        colors.set(index, { gutter, content })
+      }
+    })
+    return colors
+  }, [lineMap, navigableLines])
+
   useEffect(() => {
     const diff = diffRef.current
     if (diff === null || navigableLines.length === 0) {
@@ -375,25 +408,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     }
 
     const paint = () => {
-      const colors = new Map<number, string | RGBA | LineColorConfig>()
-      navigableLines.forEach((line, index) => {
-        let gutter = TRANSPARENT
-        let content = TRANSPARENT
-        if (line.type === "add") {
-          content = ADDED_BG
-        } else if (line.type === "remove") {
-          content = REMOVED_BG
-        }
-
-        const findings = line.newLine === undefined ? undefined : lineMap.get(line.newLine)
-        if (findings !== undefined) {
-          gutter = findings.some((finding) => finding.severity === "error") ? ERROR_GUTTER : WARNING_GUTTER
-        }
-
-        if (gutter !== TRANSPARENT || content !== TRANSPARENT) {
-          colors.set(index, { gutter, content })
-        }
-      })
+      const colors = new Map<number, string | RGBA | LineColorConfig>(baseLineColors)
       colors.set(cursorIndex, { gutter: CURSOR_BG, content: CURSOR_BG })
       diff.setLineColors(colors)
     }
@@ -413,7 +428,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     }
 
     renderer.requestRender()
-  }, [cursorIndex, lineMap, navigableLines, viewerHeight, renderer])
+  }, [baseLineColors, cursorIndex, navigableLines, viewerHeight, renderer])
 
   useKeyboard((key) => {
     if (paletteOpen) {
@@ -717,8 +732,8 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
               treeSitterClient={syntax.enabled ? syntax.treeSitterClient : undefined}
               showLineNumbers
               wrapMode="none"
-              addedBg="#102a1c"
-              removedBg="#32131f"
+              addedBg={ADDED_BG_HEX}
+              removedBg={REMOVED_BG_HEX}
               addedLineNumberBg="#0d2117"
               removedLineNumberBg="#260f18"
               addedSignColor="#3ddc84"
@@ -750,7 +765,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
                   flexDirection="row"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={index === problemIndex && focusedPane === "problems" ? "#3a1530" : "#09090b"}
+                  backgroundColor={index === problemIndex && focusedPane === "problems" ? CURSOR_BG_HEX : "#09090b"}
                 >
                   <text fg={problem.severity === "error" ? "#ff5c8a" : "#fbbf24"}>{problem.severity === "error" ? "✖ " : "⚠ "}</text>
                   <text fg="#d4d4d8">{`${problem.path}${problem.line === undefined ? "" : `:${problem.line}`} `}</text>
@@ -812,13 +827,13 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
                     justifyContent="space-between"
                     paddingLeft={1}
                     paddingRight={1}
-                    backgroundColor={index === paletteIndex ? "#3a1530" : "#111113"}
+                    backgroundColor={index === paletteIndex ? CURSOR_BG_HEX : "#111113"}
                   >
                     <box flexDirection="row">
                       <text fg={index === paletteIndex ? "#ffffff" : changed === undefined ? "#a1a1aa" : kindColor(changed.kind)}>
                         {path}
                       </text>
-                      {recency === "none" ? null : <text fg={recency === "fresh" ? "#ff4fb8" : "#8a3a6e"}> ●</text>}
+                      <RecencyDot level={recency} />
                     </box>
                     {changed === undefined ? null : <text fg={stageColor(changed.stage)}>{kindLetter(changed.kind)}</text>}
                   </box>
@@ -842,10 +857,11 @@ type TreeRowProps = {
   now: number
 }
 
-function TreeRow({ row, focused, selectedPath, expandedDirectories, checkerState, recencyByPath, now }: TreeRowProps) {
+// memoized so cursor moves and status updates do not re-render every row
+const TreeRow = memo(function TreeRow({ row, focused, selectedPath, expandedDirectories, checkerState, recencyByPath, now }: TreeRowProps) {
   const node = row.node
-  const indent = " ".repeat(Math.max(0, node.depth) * 2)
-  const background = focused ? "#3a1530" : "#09090b"
+  const indent = " ".repeat(Math.max(0, row.depth) * 2)
+  const background = focused ? CURSOR_BG_HEX : "#09090b"
 
   if (node.type === "directory") {
     const chevron = expandedDirectories.has(node.id) ? "▾" : "▸"
@@ -862,7 +878,7 @@ function TreeRow({ row, focused, selectedPath, expandedDirectories, checkerState
       >
         <box flexDirection="row">
           <text fg={focused ? "#ffffff" : "#d4d4d8"}>{`${indent}${chevron} ${node.name}/`}</text>
-          {recency === "none" ? null : <text fg={recency === "fresh" ? "#ff4fb8" : "#8a3a6e"}> ●</text>}
+          <RecencyDot level={recency} />
         </box>
         {node.changedCount > 0 ? <text fg="#71717a">{`+${node.additions} -${node.deletions}`}</text> : null}
       </box>
@@ -888,7 +904,7 @@ function TreeRow({ row, focused, selectedPath, expandedDirectories, checkerState
     >
       <box flexDirection="row">
         <text fg={nameFg}>{`${indent}${node.name}`}</text>
-        {recency === "none" ? null : <text fg={recency === "fresh" ? "#ff4fb8" : "#8a3a6e"}> ●</text>}
+        <RecencyDot level={recency} />
       </box>
       <box flexDirection="row">
         {summary.failed ? <text fg="#ff5c8a">fail </text> : null}
@@ -901,6 +917,14 @@ function TreeRow({ row, focused, selectedPath, expandedDirectories, checkerState
       </box>
     </box>
   )
+})
+
+function RecencyDot({ level }: { level: RecencyLevel }) {
+  if (level === "none") {
+    return null
+  }
+
+  return <text fg={level === "fresh" ? "#ff4fb8" : "#8a3a6e"}> ●</text>
 }
 
 function directoryRecency(

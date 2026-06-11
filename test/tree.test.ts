@@ -79,7 +79,7 @@ describe("buildFileTree", () => {
     const rows = flattenTree(tree, new Set(["dir:src", "dir:src/components/ui"]))
     const button = rows.find((row) => row.node.path === "src/components/ui/Button.tsx")
 
-    expect(button?.node.depth).toBe(2)
+    expect(button?.depth).toBe(2)
   })
 })
 
