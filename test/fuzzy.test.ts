@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { fuzzyMatch, rankFiles } from "../src/fuzzy"
 
-const noContext = { lastChangedAt: new Map<string, number>(), changed: new Set<string>(), limit: 50 }
+const noContext = { changed: new Set<string>(), lastChangedAt: new Map<string, number>(), limit: 50 }
 
 describe("fuzzyMatch", () => {
   test("matches subsequences case-insensitively", () => {
@@ -33,7 +33,7 @@ describe("fuzzyMatch", () => {
   })
 
   test("an early stray first char does not eat the real match", () => {
-    // greedy-from-first-occurrence would match the c in "src" and ruin the score
+    // Greedy-from-first-occurrence would match the c in "src" and ruin the score
     expect(fuzzyMatch("cli", "src/cli.ts") ?? 0).toBeGreaterThan(fuzzyMatch("cli", "test/cli.test.ts") ?? 0)
   })
 
@@ -66,11 +66,11 @@ describe("rankFiles", () => {
 
   test("empty query orders by recency, then changed, then name", () => {
     const results = rankFiles("", paths, {
-      lastChangedAt: new Map([
-        ["src/tree.ts", 2_000],
-        ["src/git.ts", 1_000],
-      ]),
       changed: new Set(["test/git.test.ts"]),
+      lastChangedAt: new Map([
+        ["src/tree.ts", 2000],
+        ["src/git.ts", 1000],
+      ]),
       limit: 50,
     })
 

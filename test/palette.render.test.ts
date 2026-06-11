@@ -16,8 +16,8 @@ describe("go-to-file palette", () => {
       "test/tree.test.ts": "export const testTree = true\n",
     })
     const model = await loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await createTestRenderer({ width: 120, height: 34 })
-    const settleUntil = makeSettleUntil({ renderOnce, captureCharFrame })
+    const { renderer, renderOnce, captureCharFrame, mockInput } = await createTestRenderer({ height: 34, width: 120 })
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce })
 
     try {
       createRoot(renderer).render(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax: disabledSyntax }))
@@ -28,7 +28,7 @@ describe("go-to-file palette", () => {
       const palette = await settleUntil("go-to-file palette", (frame) => frame.includes("go to file"))
       expect(palette).toContain("go to file")
 
-      // q must feed the input and show "no matches", not quit the app
+      // Q must feed the input and show "no matches", not quit the app
       await mockInput.typeText("qqqq")
       const afterTyping = await settleUntil("empty palette results", (frame) => frame.includes("sideye") && frame.includes("no matches"))
       expect(afterTyping).toContain("sideye")
@@ -47,7 +47,7 @@ describe("go-to-file palette", () => {
       expect(after).not.toContain("go to file")
     } finally {
       renderer.destroy()
-      rmSync(repoRoot, { recursive: true, force: true })
+      rmSync(repoRoot, { force: true, recursive: true })
     }
   }, 20_000)
 })

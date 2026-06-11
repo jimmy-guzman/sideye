@@ -7,7 +7,7 @@ export const checkerNames = ["lint", "prettier", "typecheck"] as const
 export type CheckerName = (typeof checkerNames)[number]
 export type CheckerStatus = "pending" | "clean" | "findings" | "failed" | "unavailable"
 
-export type Diagnostic = {
+export interface Diagnostic {
   checker: CheckerName
   path: string
   line?: number
@@ -15,7 +15,7 @@ export type Diagnostic = {
   message: string
 }
 
-export type CheckerFileState = {
+export interface CheckerFileState {
   status: CheckerStatus
   count: number
   diagnostics: Diagnostic[]
@@ -24,9 +24,12 @@ export type CheckerFileState = {
 
 export type CheckerState = Record<CheckerName, Map<string, CheckerFileState>>
 
-type PackageJson = { scripts?: Record<string, string>; workspaces?: string[] | { packages: string[] } }
+interface PackageJson {
+  scripts?: Record<string, string>
+  workspaces?: string[] | { packages: string[] }
+}
 
-type CheckerCommand = {
+interface CheckerCommand {
   checker: CheckerName
   command?: string[]
   cwd?: string
@@ -37,7 +40,7 @@ type CheckerCommand = {
 
 type DiscoverChecker = (repoRoot: string, packageJson: PackageJson | undefined, changedPaths: string[]) => CheckerCommand[]
 
-// adding a checker means one name in checkerNames and one entry here; the
+// Adding a checker means one name in checkerNames and one entry here; the
 // Record type makes the compiler reject a missing entry
 const checkerRegistry: Record<CheckerName, DiscoverChecker> = {
   lint: lintCommand,
@@ -61,7 +64,7 @@ export function markPending(state: CheckerState, files: ChangedFile[], changedPa
     const map = new Map(state[checker])
     for (const file of files) {
       if (map.get(file.path) === undefined || changed.has(file.path)) {
-        map.set(file.path, { status: "pending", count: 0, diagnostics: [] })
+        map.set(file.path, { count: 0, diagnostics: [], status: "pending" })
       }
     }
     next[checker] = map
@@ -77,13 +80,15 @@ export function directorySummary(path: string, state: CheckerState) {
   const diagnostics: Diagnostic[] = []
   for (const checker of checkerNames) {
     for (const [filePath, fileState] of state[checker]) {
-      if (!filePath.startsWith(prefix)) continue
-      pending = pending || fileState.status === "pending"
-      failed = failed || fileState.status === "failed"
+      if (!filePath.startsWith(prefix)) {
+        continue
+      }
+      pending ||= fileState.status === "pending"
+      failed ||= fileState.status === "failed"
       diagnostics.push(...fileState.diagnostics)
     }
   }
-  return { pending, failed, ...countBySeverity(diagnostics) }
+  return { failed, pending, ...countBySeverity(diagnostics) }
 }
 
 export function checkerSummary(path: string, state: CheckerState) {
@@ -97,15 +102,15 @@ export function checkerSummary(path: string, state: CheckerState) {
       continue
     }
 
-    pending = pending || fileState.status === "pending"
-    failed = failed || fileState.status === "failed"
+    pending ||= fileState.status === "pending"
+    failed ||= fileState.status === "failed"
     diagnostics.push(...fileState.diagnostics)
   }
 
-  return { pending, failed, ...countBySeverity(diagnostics) }
+  return { failed, pending, ...countBySeverity(diagnostics) }
 }
 
-const severityRank = { error: 0, warning: 1, info: 2 } as const
+const severityRank = { error: 0, info: 2, warning: 1 } as const
 
 export function allFindings(state: CheckerState): Diagnostic[] {
   const findings: Diagnostic[] = []
@@ -165,7 +170,7 @@ export async function runDiagnostics(
 ) {
   const commands = discoverCheckerCommands(repoRoot, files)
 
-  // group by checker; most have one command, typecheck may have one per workspace package
+  // Group by checker; most have one command, typecheck may have one per workspace package
   const byChecker = new Map<CheckerName, CheckerCommand[]>()
   for (const command of commands) {
     const list = byChecker.get(command.checker)
@@ -193,11 +198,11 @@ export async function runDiagnostics(
           .map(async (command) => {
             try {
               const cwd = command.cwd ?? repoRoot
-              // biome-ignore lint/style/noNonNullAssertion: filtered above
+              // Biome-ignore lint/style/noNonNullAssertion: filtered above
               const result = await runCommandAsync(command.command!, cwd, command.allowedExitCodes, signal)
               const diagnostics = command.parser(result)
               for (const d of diagnostics) {
-                // resolve paths from per-package cwd to absolute so stateForResolvedChecker can relativize them
+                // Resolve paths from per-package cwd to absolute so stateForResolvedChecker can relativize them
                 const resolvedPath = command.cwd !== undefined && !isAbsolute(d.path) ? join(command.cwd, d.path) : d.path
                 allDiagnostics.push({ ...d, path: resolvedPath })
               }
@@ -229,9 +234,9 @@ function lintCommand(repoRoot: string, packageJson: PackageJson | undefined, cha
   const script = packageJson?.scripts?.lint
   if (script !== undefined) {
     // eslint and oxlint accept --format json; other scripts fall back to
-    // parseLintOutput's exit-code interpretation
+    // ParseLintOutput's exit-code interpretation
     const jsonArgs = /^(?:eslint|oxlint)\b/.test(script) ? ["--format", "json"] : []
-    return [{ checker: "lint", command: ["bun", "run", "lint", ...jsonArgs], parser: parseLintOutput, allowedExitCodes: [0, 1] }]
+    return [{ allowedExitCodes: [0, 1], checker: "lint", command: ["bun", "run", "lint", ...jsonArgs], parser: parseLintOutput }]
   }
 
   if (changedPaths.length === 0) {
@@ -241,10 +246,10 @@ function lintCommand(repoRoot: string, packageJson: PackageJson | undefined, cha
   if (hasBinary(repoRoot, "oxlint")) {
     return [
       {
+        allowedExitCodes: [0, 1],
         checker: "lint",
         command: ["bunx", "oxlint", "--format", "json", ...changedPaths],
         parser: parseLintOutput,
-        allowedExitCodes: [0, 1],
       },
     ]
   }
@@ -252,10 +257,10 @@ function lintCommand(repoRoot: string, packageJson: PackageJson | undefined, cha
   if (hasBinary(repoRoot, "eslint")) {
     return [
       {
+        allowedExitCodes: [0, 1],
         checker: "lint",
         command: ["bunx", "eslint", "--format", "json", ...changedPaths],
         parser: parseLintOutput,
-        allowedExitCodes: [0, 1],
       },
     ]
   }
@@ -270,21 +275,21 @@ function prettierCommand(repoRoot: string, _packageJson: PackageJson | undefined
 
   return [
     {
+      allowedExitCodes: [0, 1],
       checker: "prettier",
       command: ["bunx", "prettier", "--list-different", ...changedPaths],
       parser: parsePrettierList,
-      allowedExitCodes: [0, 1],
     },
   ]
 }
 
 function typecheckCommand(repoRoot: string, packageJson: PackageJson | undefined, changedPaths: string[]): CheckerCommand[] {
   if (packageJson?.scripts?.typecheck !== undefined) {
-    return [{ checker: "typecheck", command: ["bun", "run", "typecheck"], parser: parseTypeScriptOutput, allowedExitCodes: [0, 1, 2] }]
+    return [{ allowedExitCodes: [0, 1, 2], checker: "typecheck", command: ["bun", "run", "typecheck"], parser: parseTypeScriptOutput }]
   }
 
   if (existsSync(`${repoRoot}/tsconfig.json`) && hasBinary(repoRoot, "tsc")) {
-    return [{ checker: "typecheck", command: ["bunx", "tsc", "--noEmit"], parser: parseTypeScriptOutput, allowedExitCodes: [0, 1, 2] }]
+    return [{ allowedExitCodes: [0, 1, 2], checker: "typecheck", command: ["bunx", "tsc", "--noEmit"], parser: parseTypeScriptOutput }]
   }
 
   return discoverWorkspaceTypechecks(repoRoot, packageJson, changedPaths)
@@ -312,19 +317,19 @@ function discoverWorkspaceTypechecks(repoRoot: string, packageJson: PackageJson 
     const pkgJson = readPackageJson(pkgDir)
     if (pkgJson?.scripts?.typecheck !== undefined) {
       commands.push({
+        allowedExitCodes: [0, 1, 2],
         checker: "typecheck",
         command: ["bun", "run", "typecheck"],
         cwd: pkgDir,
         parser: parseTypeScriptOutput,
-        allowedExitCodes: [0, 1, 2],
       })
     } else if (existsSync(`${pkgDir}/tsconfig.json`) && hasBinary(repoRoot, "tsc")) {
       commands.push({
+        allowedExitCodes: [0, 1, 2],
         checker: "typecheck",
         command: ["bunx", "tsc", "--noEmit"],
         cwd: pkgDir,
         parser: parseTypeScriptOutput,
-        allowedExitCodes: [0, 1, 2],
       })
     }
   }
@@ -355,11 +360,15 @@ function getWorkspacePatterns(repoRoot: string, packageJson: PackageJson | undef
 
 function getPnpmWorkspacePatterns(repoRoot: string): string[] {
   const path = `${repoRoot}/pnpm-workspace.yaml`
-  if (!existsSync(path)) return []
+  if (!existsSync(path)) {
+    return []
+  }
   const text = readFileSync(path, "utf8")
-  const match = text.match(/^packages:\s*\n((?:[ \t]+-[^\n]*\n?)+)/m)
-  if (match === null) return []
-  return match[1]
+  const match = text.match(/^packages:\s*\n(?<block>(?:[ \t]+-[^\n]*\n?)+)/m)
+  if (match === null) {
+    return []
+  }
+  return (match.groups?.block ?? "")
     .split("\n")
     .map((line) =>
       line
@@ -400,14 +409,14 @@ export function parseLintOutput(output: { stdout: string; stderr: string; exitCo
     return fromJson
   }
 
-  // text output: trust the exit code — 0 is clean, 1 is findings, and
-  // anything else was already rejected by allowedExitCodes as a failure
+  // Text output: trust the exit code — 0 is clean, 1 is findings, and
+  // Anything else was already rejected by allowedExitCodes as a failure
   if (output.exitCode === 0) {
     return []
   }
 
   const summary = (stdout !== "" ? stdout : output.stderr.trim()).split("\n")[0] ?? ""
-  return [{ checker: "lint", path: "", severity: "error", message: summary === "" ? "lint reported findings" : summary }]
+  return [{ checker: "lint", message: summary === "" ? "lint reported findings" : summary, path: "", severity: "error" }]
 }
 
 function parseLintJson(stdout: string): Diagnostic[] | undefined {
@@ -420,29 +429,29 @@ function parseLintJson(stdout: string): Diagnostic[] | undefined {
 
   if (Array.isArray(parsed)) {
     // eslint --format json
-    const files = parsed as Array<{ filePath?: string; messages?: Array<{ line?: number; severity?: number; message?: string }> }>
+    const files = parsed as { filePath?: string; messages?: { line?: number; severity?: number; message?: string }[] }[]
     return files.flatMap((file) =>
       (file.messages ?? []).map((message) => ({
         checker: "lint" as const,
-        path: file.filePath ?? "",
         line: message.line,
-        severity: message.severity === 2 ? ("error" as const) : ("warning" as const),
         message: message.message ?? "lint finding",
+        path: file.filePath ?? "",
+        severity: message.severity === 2 ? ("error" as const) : ("warning" as const),
       })),
     )
   }
 
   if (typeof parsed === "object" && parsed !== null && "diagnostics" in parsed) {
-    // oxlint --format json
+    // Oxlint --format json
     const report = parsed as {
-      diagnostics?: Array<{ filename?: string; message?: string; severity?: string; labels?: Array<{ span?: { line?: number } }> }>
+      diagnostics?: { filename?: string; message?: string; severity?: string; labels?: { span?: { line?: number } }[] }[]
     }
     return (report.diagnostics ?? []).map((diagnostic) => ({
       checker: "lint" as const,
-      path: diagnostic.filename ?? "",
       line: diagnostic.labels?.[0]?.span?.line,
-      severity: diagnostic.severity === "warning" ? ("warning" as const) : ("error" as const),
       message: diagnostic.message ?? "oxlint finding",
+      path: diagnostic.filename ?? "",
+      severity: diagnostic.severity === "warning" ? ("warning" as const) : ("error" as const),
     }))
   }
 
@@ -456,15 +465,15 @@ export function parsePrettierList(output: { stdout: string }): Diagnostic[] {
     .filter((line) => line !== "" && !line.startsWith("Checking formatting") && !line.startsWith("All matched files"))
     .map((path) => ({
       checker: "prettier" as const,
+      message: "Formatting differs from Prettier",
       path,
       severity: "warning" as const,
-      message: "Formatting differs from Prettier",
     }))
 }
 
 export function parseTypeScriptOutput(output: { stdout: string; stderr: string; exitCode?: number }): Diagnostic[] {
   const diagnostics = `${output.stdout}\n${output.stderr}`.split("\n").flatMap((line) => {
-    const match = line.match(/^(.+?)\((\d+),(\d+)\):\s+error\s+TS\d+:\s+(.+)$/)
+    const match = line.match(/^(?<path>.+?)\((?<line>\d+),(?<col>\d+)\):\s+error\s+TS\d+:\s+(?<message>.+)$/)
     if (match === null) {
       return []
     }
@@ -472,10 +481,10 @@ export function parseTypeScriptOutput(output: { stdout: string; stderr: string; 
     return [
       {
         checker: "typecheck" as const,
-        path: match[1],
-        line: Number.parseInt(match[2], 10),
+        line: Number.parseInt(match.groups?.line ?? "0", 10),
+        message: match.groups?.message ?? "",
+        path: match.groups?.path ?? "",
         severity: "error" as const,
-        message: match[4],
       },
     ]
   })
@@ -493,7 +502,7 @@ export function stateForResolvedChecker(checker: CheckerName, files: ChangedFile
   for (const diagnostic of diagnostics) {
     const path = relativize(diagnostic.path, repoRoot)
     const existing = byPath.get(path)
-    const normalized = { ...diagnostic, path, checker }
+    const normalized = { ...diagnostic, checker, path }
     if (existing === undefined) {
       byPath.set(path, [normalized])
     } else {
@@ -501,15 +510,15 @@ export function stateForResolvedChecker(checker: CheckerName, files: ChangedFile
     }
   }
 
-  // keep findings for every reported path (tsc runs project-wide), not just changed files
+  // Keep findings for every reported path (tsc runs project-wide), not just changed files
   const state = new Map<string, CheckerFileState>()
   for (const [path, fileDiagnostics] of byPath) {
-    state.set(path, { status: "findings", count: fileDiagnostics.length, diagnostics: fileDiagnostics })
+    state.set(path, { count: fileDiagnostics.length, diagnostics: fileDiagnostics, status: "findings" })
   }
 
   for (const file of files) {
     if (!state.has(file.path)) {
-      state.set(file.path, { status: "clean", count: 0, diagnostics: [] })
+      state.set(file.path, { count: 0, diagnostics: [], status: "clean" })
     }
   }
 
@@ -521,10 +530,10 @@ function stateForEveryFile(files: ChangedFile[], status: "failed" | "unavailable
     files.map((file) => [
       file.path,
       {
-        status,
         count: 0,
         diagnostics: [],
         message,
+        status,
       },
     ]),
   )
@@ -532,9 +541,9 @@ function stateForEveryFile(files: ChangedFile[], status: "failed" | "unavailable
 
 function unconfiguredChecker(checker: CheckerName): CheckerCommand {
   return {
+    allowedExitCodes: [0],
     checker,
     parser: () => [],
-    allowedExitCodes: [0],
     unavailableMessage: `${checker} is not configured`,
   }
 }
@@ -544,9 +553,9 @@ function initialFileState(files: ChangedFile[]) {
     files.map((file) => [
       file.path,
       {
-        status: "pending" as const,
         count: 0,
         diagnostics: [],
+        status: "pending" as const,
       },
     ]),
   )

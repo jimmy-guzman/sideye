@@ -82,14 +82,14 @@ describe("parsePatch", () => {
     const lines = parsePatch(diff).hunks[0]?.lines ?? []
     const added = lines.find((line) => line.type === "add")
     expect(added === undefined ? undefined : lineReference("src/a.ts", added)).toEqual({
-      path: "src/a.ts",
       line: 2,
+      path: "src/a.ts",
       snippet: "const b = 3",
     })
     const removed = lines.find((line) => line.type === "remove")
     expect(removed === undefined ? undefined : lineReference("src/a.ts", removed)).toEqual({
-      path: "src/a.ts",
       line: 2,
+      path: "src/a.ts",
       snippet: "const b = 2",
     })
   })

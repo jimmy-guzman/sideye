@@ -20,18 +20,18 @@ import {
 import type { ChangedFile } from "../src/git"
 
 const file: ChangedFile = {
-  path: "src/a.ts",
-  kind: "modified",
-  stage: "unstaged",
   additions: 1,
-  deletions: 0,
   binary: false,
-  warnings: [],
+  deletions: 0,
+  kind: "modified",
   mtimeMs: 0,
+  path: "src/a.ts",
+  stage: "unstaged",
+  warnings: [],
 }
 
 function diagnostic(overrides: Partial<Diagnostic>): Diagnostic {
-  return { checker: "typecheck", path: "src/a.ts", line: 3, severity: "error", message: "nope", ...overrides }
+  return { checker: "typecheck", line: 3, message: "nope", path: "src/a.ts", severity: "error", ...overrides }
 }
 
 function stateWith(diagnostics: Diagnostic[]): CheckerState {
@@ -63,29 +63,29 @@ describe("stateForResolvedChecker", () => {
 describe("problem helpers", () => {
   test("allFindings sorts by severity, path, then line", () => {
     const state = stateWith([
-      diagnostic({ path: "/repo/src/b.ts", severity: "warning", line: 1 }),
-      diagnostic({ path: "/repo/src/b.ts", severity: "error", line: 9 }),
-      diagnostic({ path: "/repo/src/a.ts", severity: "error", line: 2 }),
+      diagnostic({ line: 1, path: "/repo/src/b.ts", severity: "warning" }),
+      diagnostic({ line: 9, path: "/repo/src/b.ts", severity: "error" }),
+      diagnostic({ line: 2, path: "/repo/src/a.ts", severity: "error" }),
     ])
 
     expect(allFindings(state).map((finding) => `${finding.path}:${finding.line}`)).toEqual(["src/a.ts:2", "src/b.ts:9", "src/b.ts:1"])
   })
 
   test("countBySeverity tallies errors and warnings", () => {
-    const state = stateWith([diagnostic({}), diagnostic({ line: 5 }), diagnostic({ severity: "warning", line: 7 })])
+    const state = stateWith([diagnostic({}), diagnostic({ line: 5 }), diagnostic({ line: 7, severity: "warning" })])
     expect(countBySeverity(allFindings(state))).toEqual({ errors: 2, warnings: 1 })
   })
 
   test("checkerSummary tallies a single path and tracks pending", () => {
     const state = stateWith([diagnostic({}), diagnostic({ path: "/repo/src/other.ts" })])
-    // lint and prettier are still pending in stateWith; typecheck resolved
-    expect(checkerSummary("src/a.ts", state)).toEqual({ pending: true, failed: false, errors: 1, warnings: 0 })
+    // Lint and prettier are still pending in stateWith; typecheck resolved
+    expect(checkerSummary("src/a.ts", state)).toEqual({ errors: 1, failed: false, pending: true, warnings: 0 })
   })
 
   test("checkerSummary surfaces failed runs", () => {
     const state: CheckerState = {
       ...initialCheckerState([file]),
-      lint: new Map([["src/a.ts", { status: "failed", count: 0, diagnostics: [], message: "boom\ndetail" }]]),
+      lint: new Map([["src/a.ts", { count: 0, diagnostics: [], message: "boom\ndetail", status: "failed" }]]),
     }
     expect(checkerSummary("src/a.ts", state).failed).toBe(true)
   })
@@ -102,43 +102,43 @@ describe("problem helpers", () => {
 describe("diagnostic parsers", () => {
   test("parses eslint json", () => {
     const diagnostics = parseLintOutput({
-      stdout: JSON.stringify([{ filePath: "src/a.ts", messages: [{ line: 3, severity: 2, message: "bad" }] }]),
-      stderr: "",
       exitCode: 1,
+      stderr: "",
+      stdout: JSON.stringify([{ filePath: "src/a.ts", messages: [{ line: 3, message: "bad", severity: 2 }] }]),
     })
-    expect(diagnostics).toEqual([{ checker: "lint", path: "src/a.ts", line: 3, severity: "error", message: "bad" }])
+    expect(diagnostics).toEqual([{ checker: "lint", line: 3, message: "bad", path: "src/a.ts", severity: "error" }])
   })
 
   test("parses oxlint json", () => {
     const diagnostics = parseLintOutput({
-      stdout: JSON.stringify({
-        diagnostics: [{ filename: "src/a.ts", message: "bad", severity: "warning", labels: [{ span: { line: 7 } }] }],
-      }),
-      stderr: "",
       exitCode: 1,
+      stderr: "",
+      stdout: JSON.stringify({
+        diagnostics: [{ filename: "src/a.ts", labels: [{ span: { line: 7 } }], message: "bad", severity: "warning" }],
+      }),
     })
-    expect(diagnostics).toEqual([{ checker: "lint", path: "src/a.ts", line: 7, severity: "warning", message: "bad" }])
+    expect(diagnostics).toEqual([{ checker: "lint", line: 7, message: "bad", path: "src/a.ts", severity: "warning" }])
   })
 
   test("treats unparseable lint output with exit 0 as clean", () => {
-    expect(parseLintOutput({ stdout: "Found 0 warnings and 0 errors.\n", stderr: "", exitCode: 0 })).toEqual([])
+    expect(parseLintOutput({ exitCode: 0, stderr: "", stdout: "Found 0 warnings and 0 errors.\n" })).toEqual([])
   })
 
   test("treats unparseable lint output with exit 1 as findings, not failure", () => {
-    expect(parseLintOutput({ stdout: "src/a.ts:1:1: error no-unused-vars\nmore", stderr: "", exitCode: 1 })).toEqual([
-      { checker: "lint", path: "", severity: "error", message: "src/a.ts:1:1: error no-unused-vars" },
+    expect(parseLintOutput({ exitCode: 1, stderr: "", stdout: "src/a.ts:1:1: error no-unused-vars\nmore" })).toEqual([
+      { checker: "lint", message: "src/a.ts:1:1: error no-unused-vars", path: "", severity: "error" },
     ])
   })
 
   test("parses prettier list output", () => {
     expect(parsePrettierList({ stdout: "Checking formatting...\nsrc/a.ts\n" })).toEqual([
-      { checker: "prettier", path: "src/a.ts", severity: "warning", message: "Formatting differs from Prettier" },
+      { checker: "prettier", message: "Formatting differs from Prettier", path: "src/a.ts", severity: "warning" },
     ])
   })
 
   test("parses TypeScript diagnostics", () => {
-    expect(parseTypeScriptOutput({ stdout: "src/a.ts(4,12): error TS2322: nope", stderr: "" })).toEqual([
-      { checker: "typecheck", path: "src/a.ts", line: 4, severity: "error", message: "nope" },
+    expect(parseTypeScriptOutput({ stderr: "", stdout: "src/a.ts(4,12): error TS2322: nope" })).toEqual([
+      { checker: "typecheck", line: 4, message: "nope", path: "src/a.ts", severity: "error" },
     ])
   })
 })
@@ -154,12 +154,12 @@ describe("runDiagnostics", () => {
       })
       return states.get("lint")
     } finally {
-      rmSync(dir, { recursive: true, force: true })
+      rmSync(dir, { force: true, recursive: true })
     }
   }
 
   test("unconfigured checkers resolve as unavailable instead of clean or failed", async () => {
-    // deleted-only changes leave no paths to lint or format
+    // Deleted-only changes leave no paths to lint or format
     const deleted: ChangedFile = { ...file, kind: "deleted" }
     const states = new Map<string, string>()
     const dir = mkdtempSync(join(tmpdir(), "sideye-diagnostics-"))
@@ -168,7 +168,7 @@ describe("runDiagnostics", () => {
         states.set(checker, state.get("src/a.ts")?.status ?? "missing")
       })
     } finally {
-      rmSync(dir, { recursive: true, force: true })
+      rmSync(dir, { force: true, recursive: true })
     }
     expect(states.get("lint")).toBe("unavailable")
     expect(states.get("prettier")).toBe("unavailable")
@@ -213,8 +213,8 @@ function makeWorkspace(packages: { name: string; hasTypecheck?: boolean; hasTsco
 describe("workspace typecheck discovery", () => {
   test("discovers only the package containing changed files", () => {
     const dir = makeWorkspace([
-      { name: "core", hasTsconfig: true },
-      { name: "ui", hasTsconfig: true },
+      { hasTsconfig: true, name: "core" },
+      { hasTsconfig: true, name: "ui" },
     ])
     try {
       const coreFile: ChangedFile = { ...file, path: "packages/core/src/a.ts" }
@@ -222,14 +222,14 @@ describe("workspace typecheck discovery", () => {
       expect(commands).toHaveLength(1)
       expect(commands[0].cwd).toBe(join(dir, "packages", "core"))
     } finally {
-      rmSync(dir, { recursive: true, force: true })
+      rmSync(dir, { force: true, recursive: true })
     }
   })
 
   test("merges diagnostics from multiple affected packages with normalized paths", async () => {
     const dir = makeWorkspace([
-      { name: "core", hasTypecheck: true },
-      { name: "ui", hasTypecheck: true },
+      { hasTypecheck: true, name: "core" },
+      { hasTypecheck: true, name: "ui" },
     ])
     try {
       const files: ChangedFile[] = [
@@ -241,17 +241,17 @@ describe("workspace typecheck discovery", () => {
         states.set(checker, state as Map<string, { status: string; diagnostics: Diagnostic[] }>)
       })
       const typecheck = states.get("typecheck")
-      // both packages reported errors; paths should be monorepo-relative
+      // Both packages reported errors; paths should be monorepo-relative
       const allPaths = [...(typecheck?.keys() ?? [])]
       expect(allPaths).toContain("packages/core/src/a.ts")
       expect(allPaths).toContain("packages/ui/src/a.ts")
     } finally {
-      rmSync(dir, { recursive: true, force: true })
+      rmSync(dir, { force: true, recursive: true })
     }
   })
 
   test("reports unavailable when no workspace packages contain changed files", () => {
-    const dir = makeWorkspace([{ name: "core", hasTsconfig: true }])
+    const dir = makeWorkspace([{ hasTsconfig: true, name: "core" }])
     try {
       const otherFile: ChangedFile = { ...file, path: "docs/readme.md" }
       const commands = discoverCheckerCommands(dir, [otherFile]).filter((c) => c.checker === "typecheck")
@@ -259,7 +259,7 @@ describe("workspace typecheck discovery", () => {
       expect(commands[0].command).toBeUndefined()
       expect(commands[0].unavailableMessage).toContain("no workspace packages contain changed files")
     } finally {
-      rmSync(dir, { recursive: true, force: true })
+      rmSync(dir, { force: true, recursive: true })
     }
   })
 
@@ -278,7 +278,7 @@ describe("workspace typecheck discovery", () => {
       expect(commands).toHaveLength(1)
       expect(commands[0].cwd).toBe(pkgDir)
     } finally {
-      rmSync(dir, { recursive: true, force: true })
+      rmSync(dir, { force: true, recursive: true })
     }
   })
 
@@ -291,7 +291,7 @@ describe("workspace typecheck discovery", () => {
       expect(commands[0].command).toBeUndefined()
       expect(commands[0].unavailableMessage).toContain("no tsconfig.json at repo root")
     } finally {
-      rmSync(dir, { recursive: true, force: true })
+      rmSync(dir, { force: true, recursive: true })
     }
   })
 })

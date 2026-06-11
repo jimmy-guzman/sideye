@@ -2,7 +2,7 @@
 
 // Builds standalone sideye binaries and the npm package layout.
 // Modeled on opencode's build script (anomalyco/opencode packages/opencode/script/build.ts),
-// which established the pattern for compiling OpenTUI apps with `bun build --compile`.
+// Which established the pattern for compiling OpenTUI apps with `bun build --compile`.
 
 import { $ } from "bun"
 import fs from "node:fs"
@@ -16,13 +16,16 @@ const single = process.argv.includes("--single")
 const skipInstall = process.argv.includes("--skip-install")
 const archive = process.argv.includes("--archive")
 
-type Target = { os: "darwin" | "linux"; arch: "arm64" | "x64" }
+interface Target {
+  os: "darwin" | "linux"
+  arch: "arm64" | "x64"
+}
 
 const allTargets: Target[] = [
-  { os: "darwin", arch: "arm64" },
-  { os: "darwin", arch: "x64" },
-  { os: "linux", arch: "x64" },
-  { os: "linux", arch: "arm64" },
+  { arch: "arm64", os: "darwin" },
+  { arch: "x64", os: "darwin" },
+  { arch: "x64", os: "linux" },
+  { arch: "arm64", os: "linux" },
 ]
 
 const targets = single ? allTargets.filter((target) => target.os === process.platform && target.arch === process.arch) : allTargets
@@ -35,7 +38,7 @@ if (targets.length === 0) {
 await $`rm -rf dist`
 
 if (!skipInstall) {
-  // materialize every platform's native @opentui core so any target can embed its library
+  // Materialize every platform's native @opentui core so any target can embed its library
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
 }
 
@@ -53,25 +56,25 @@ for (const target of targets) {
 
   // oxlint-disable-next-line no-await-in-loop -- sequential cross-compilation: each target must complete before the next
   const result = await Bun.build({
-    conditions: ["bun", "node"],
-    tsconfig: "./tsconfig.json",
-    format: "esm",
-    minify: true,
-    sourcemap: "none",
-    splitting: true,
     compile: {
       autoloadBunfig: false,
       autoloadDotenv: false,
-      autoloadTsconfig: true,
       autoloadPackageJson: true,
-      target: `bun-${target.os}-${target.arch}` as never,
+      autoloadTsconfig: true,
       outfile: `dist/${name}/bin/${pkg.name}`,
+      target: `bun-${target.os}-${target.arch}` as never,
     },
-    entrypoints: ["./src/main.tsx", parserWorker],
+    conditions: ["bun", "node"],
     define: {
       OTUI_TREE_SITTER_WORKER_PATH: JSON.stringify(bunfsRoot + workerRelativePath),
       ...(target.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify("glibc") } : {}),
     },
+    entrypoints: ["./src/main.tsx", parserWorker],
+    format: "esm",
+    minify: true,
+    sourcemap: "none",
+    splitting: true,
+    tsconfig: "./tsconfig.json",
   })
 
   if (!result.success) {
@@ -93,14 +96,14 @@ for (const target of targets) {
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
       {
-        name,
-        version: pkg.version,
-        description: `sideye binary for ${target.os}-${target.arch}`,
-        repository: "github:jimmy-guzman/sideye",
-        license: "MIT",
-        preferUnplugged: true,
-        os: [target.os],
         cpu: [target.arch],
+        description: `sideye binary for ${target.os}-${target.arch}`,
+        license: "MIT",
+        name,
+        os: [target.os],
+        preferUnplugged: true,
+        repository: "github:jimmy-guzman/sideye",
+        version: pkg.version,
       },
       null,
       2,
@@ -117,16 +120,16 @@ if (!single) {
   await Bun.file(`dist/${pkg.name}/package.json`).write(
     JSON.stringify(
       {
-        name: pkg.name,
-        version: pkg.version,
-        description: "Read-only companion TUI for CLI coding agents",
-        repository: "github:jimmy-guzman/sideye",
-        homepage: "https://github.com/jimmy-guzman/sideye",
+        bin: { [pkg.name]: "./bin/sideye.js" },
         bugs: "https://github.com/jimmy-guzman/sideye/issues",
+        description: "Read-only companion TUI for CLI coding agents",
+        homepage: "https://github.com/jimmy-guzman/sideye",
         keywords: ["tui", "diff", "git", "code-review", "coding-agent", "terminal"],
         license: "MIT",
-        bin: { [pkg.name]: "./bin/sideye.js" },
+        name: pkg.name,
         optionalDependencies: Object.fromEntries(allTargets.map((target) => [`${pkg.name}-${target.os}-${target.arch}`, pkg.version])),
+        repository: "github:jimmy-guzman/sideye",
+        version: pkg.version,
       },
       null,
       2,
@@ -137,8 +140,8 @@ if (!single) {
 if (archive) {
   const sums: string[] = []
   for (const name of built) {
-    // every platform ships tar.gz so the format never needs to be re-derived
-    // by install.sh, release.yml, or the homebrew formula
+    // Every platform ships tar.gz so the format never needs to be re-derived
+    // By install.sh, release.yml, or the homebrew formula
     const archiveName = `${name}.tar.gz`
     // oxlint-disable-next-line no-await-in-loop -- sequential archiving: each archive must complete before computing its checksum
     await $`tar -czf ../../${archiveName} ${pkg.name}`.cwd(`dist/${name}/bin`)

@@ -10,7 +10,7 @@ import {
 import type { ChangedFile, RepoFile } from "../src/git"
 
 function changed(path: string, overrides: Partial<ChangedFile> = {}): ChangedFile {
-  return { path, kind: "modified", stage: "unstaged", additions: 1, deletions: 0, binary: false, warnings: [], mtimeMs: 0, ...overrides }
+  return { additions: 1, binary: false, deletions: 0, kind: "modified", mtimeMs: 0, path, stage: "unstaged", warnings: [], ...overrides }
 }
 
 const repoFiles: RepoFile[] = [
@@ -22,7 +22,7 @@ const repoFiles: RepoFile[] = [
 ]
 
 const changedByPath = new Map([
-  ["src/App.tsx", changed("src/App.tsx", { kind: "added", stage: "staged", additions: 10, warnings: ["new"] })],
+  ["src/App.tsx", changed("src/App.tsx", { additions: 10, kind: "added", stage: "staged", warnings: ["new"] })],
   ["src/git.ts", changed("src/git.ts", { additions: 3, deletions: 1 })],
 ])
 
@@ -46,7 +46,7 @@ describe("buildFileTree", () => {
     const tree = buildFileTree(repoFiles, changedByPath, { changesOnly: false })
     const src = tree.find((node) => node.type === "directory" && node.path === "src")
 
-    expect(src).toMatchObject({ type: "directory", additions: 13, deletions: 1, fileCount: 3, changedCount: 2 })
+    expect(src).toMatchObject({ additions: 13, changedCount: 2, deletions: 1, fileCount: 3, type: "directory" })
   })
 
   test("flattens single-child directory chains", () => {
@@ -67,7 +67,7 @@ describe("buildFileTree", () => {
   })
 
   test("keeps files that vanished from the index but are in the changed set", () => {
-    const deleted = changed("src/gone.ts", { kind: "deleted", stage: "staged", additions: 0, deletions: 12 })
+    const deleted = changed("src/gone.ts", { additions: 0, deletions: 12, kind: "deleted", stage: "staged" })
     const tree = buildFileTree(repoFiles, new Map([...changedByPath, ["src/gone.ts", deleted]]), { changesOnly: false })
     const rows = flattenTree(tree, new Set(["dir:src"]))
 
@@ -86,11 +86,11 @@ describe("buildFileTree", () => {
 describe("expansion", () => {
   test("default expansion covers ancestors of changed paths only", () => {
     const expanded = defaultExpandedDirectories(["src/App.tsx", "src/components/ui/Button.tsx"])
-    expect(Array.from(expanded).toSorted()).toEqual(["dir:src", "dir:src/components", "dir:src/components/ui"])
+    expect([...expanded].toSorted()).toEqual(["dir:src", "dir:src/components", "dir:src/components/ui"])
   })
 
   test("expands ancestors for a selected path", () => {
-    expect(Array.from(expandAncestorsForPath(new Set(), "src/ui/App.tsx"))).toEqual(["dir:src", "dir:src/ui"])
+    expect([...expandAncestorsForPath(new Set(), "src/ui/App.tsx")]).toEqual(["dir:src", "dir:src/ui"])
   })
 })
 

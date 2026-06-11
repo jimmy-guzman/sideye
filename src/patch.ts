@@ -1,6 +1,6 @@
 import type { CopyReferencePayload } from "./copy-reference"
 
-export type ParsedDiffLine = {
+export interface ParsedDiffLine {
   type: "context" | "add" | "remove"
   oldLine?: number
   newLine?: number
@@ -8,7 +8,7 @@ export type ParsedDiffLine = {
   raw: string
 }
 
-export type ParsedHunk = {
+export interface ParsedHunk {
   index: number
   header: string
   oldStart: number
@@ -18,12 +18,12 @@ export type ParsedHunk = {
   lines: ParsedDiffLine[]
 }
 
-export type ParsedPatch = {
+export interface ParsedPatch {
   header: string[]
   hunks: ParsedHunk[]
 }
 
-const hunkPattern = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/
+const hunkPattern = /^@@ -(?<oldStart>\d+)(?:,(?<oldLines>\d+))? \+(?<newStart>\d+)(?:,(?<newLines>\d+))? @@/
 
 export function parsePatch(diff: string): ParsedPatch {
   const header: string[] = []
@@ -31,30 +31,30 @@ export function parsePatch(diff: string): ParsedPatch {
   let current: ParsedHunk | undefined
   let oldLine = 0
   let newLine = 0
-  // the @@ header's line counts say exactly how much body follows; while they
-  // are unspent, every -/+/space line is content — even raw "---…"/"+++…",
-  // which only mark file headers between hunks (e.g. a removed "-- comment")
+  // The @@ header's line counts say exactly how much body follows; while they
+  // Are unspent, every -/+/space line is content — even raw "---…"/"+++…",
+  // Which only mark file headers between hunks (e.g. a removed "-- comment")
   let remainingOld = 0
   let remainingNew = 0
 
   for (const raw of diff.split("\n")) {
     if (current !== undefined && (remainingOld > 0 || remainingNew > 0)) {
       if (raw.startsWith("+")) {
-        current.lines.push({ type: "add", newLine, content: raw.slice(1), raw })
+        current.lines.push({ content: raw.slice(1), newLine, raw, type: "add" })
         newLine += 1
         remainingNew -= 1
         continue
       }
 
       if (raw.startsWith("-")) {
-        current.lines.push({ type: "remove", oldLine, content: raw.slice(1), raw })
+        current.lines.push({ content: raw.slice(1), oldLine, raw, type: "remove" })
         oldLine += 1
         remainingOld -= 1
         continue
       }
 
       if (raw.startsWith(" ")) {
-        current.lines.push({ type: "context", oldLine, newLine, content: raw.slice(1), raw })
+        current.lines.push({ content: raw.slice(1), newLine, oldLine, raw, type: "context" })
         oldLine += 1
         newLine += 1
         remainingOld -= 1
@@ -67,7 +67,7 @@ export function parsePatch(diff: string): ParsedPatch {
         continue
       }
 
-      // anything else means the counts were inconsistent; close the hunk
+      // Anything else means the counts were inconsistent; close the hunk
       remainingOld = 0
       remainingNew = 0
     }
@@ -75,13 +75,13 @@ export function parsePatch(diff: string): ParsedPatch {
     const hunkMatch = raw.match(hunkPattern)
     if (hunkMatch !== null) {
       current = {
-        index: hunks.length,
         header: raw,
-        oldStart: Number.parseInt(hunkMatch[1], 10),
-        oldLines: Number.parseInt(hunkMatch[2] ?? "1", 10),
-        newStart: Number.parseInt(hunkMatch[3], 10),
-        newLines: Number.parseInt(hunkMatch[4] ?? "1", 10),
+        index: hunks.length,
         lines: [],
+        newLines: Number.parseInt(hunkMatch.groups?.newLines ?? "1", 10),
+        newStart: Number.parseInt(hunkMatch.groups?.newStart ?? "0", 10),
+        oldLines: Number.parseInt(hunkMatch.groups?.oldLines ?? "1", 10),
+        oldStart: Number.parseInt(hunkMatch.groups?.oldStart ?? "0", 10),
       }
       oldLine = current.oldStart
       newLine = current.newStart
@@ -100,13 +100,13 @@ export function parsePatch(diff: string): ParsedPatch {
 }
 
 export function lineReference(path: string, line: ParsedDiffLine): CopyReferencePayload {
-  return { path, line: line.newLine ?? line.oldLine, snippet: line.content }
+  return { line: line.newLine ?? line.oldLine, path, snippet: line.content }
 }
 
 export function renderPatch(diff: string, options: { full: boolean; maxLines: number }) {
   const parsed = parsePatch(diff)
   if (parsed.hunks.length === 0) {
-    return { diff, truncated: false, parsed, bodyLineCount: 0 }
+    return { bodyLineCount: 0, diff, parsed, truncated: false }
   }
 
   const lines: string[] = [...parsed.header]
@@ -136,5 +136,5 @@ export function renderPatch(diff: string, options: { full: boolean; maxLines: nu
     }
   }
 
-  return { diff: lines.join("\n"), truncated, parsed, bodyLineCount: emittedBodyLines }
+  return { bodyLineCount: emittedBodyLines, diff: lines.join("\n"), parsed, truncated }
 }

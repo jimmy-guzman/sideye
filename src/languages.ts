@@ -12,34 +12,34 @@ import tsTestGlobalsHighlights from "../assets/tree-sitter/typescript/test-globa
 import yamlHighlights from "../assets/tree-sitter/yaml/highlights.scm" with { type: "file" }
 import yamlWasm from "../assets/tree-sitter/yaml/tree-sitter-yaml.wasm" with { type: "file" }
 
-export type Language = {
+export interface Language {
   filetype: string
   extensions: string[]
-  // every highlight query the filetype renders with; also feeds capture-style expansion
+  // Every highlight query the filetype renders with; also feeds capture-style expansion
   highlights: string[]
-  // grammar to register with the tree-sitter client; absent means the parser
-  // ships bundled with @opentui/core and registers itself
+  // Grammar to register with the tree-sitter client; absent means the parser
+  // Ships bundled with @opentui/core and registers itself
   wasm?: string
   aliases?: string[]
-  // a bundled parser can only be replaced after the client initializes
+  // A bundled parser can only be replaced after the client initializes
   replacesBundled?: boolean
 }
 
-// one language = one entry (plus asset files); filetype.ts and syntax.ts both
-// derive from this table
+// One language = one entry (plus asset files); filetype.ts and syntax.ts both
+// Derive from this table
 export const languages: Language[] = [
   {
-    filetype: "typescript",
-    extensions: [".ts", ".tsx"],
-    highlights: [tsBundledHighlights, tsTestGlobalsHighlights],
-    wasm: tsBundledWasm,
     aliases: ["typescriptreact"],
+    extensions: [".ts", ".tsx"],
+    filetype: "typescript",
+    highlights: [tsBundledHighlights, tsTestGlobalsHighlights],
     replacesBundled: true,
+    wasm: tsBundledWasm,
   },
-  { filetype: "javascript", extensions: [".js", ".jsx"], highlights: [jsBundledHighlights] },
-  { filetype: "bash", extensions: [".sh", ".bash", ".zsh"], highlights: [bashHighlights], wasm: bashWasm },
-  { filetype: "json", extensions: [".json", ".jsonc"], highlights: [jsonHighlights], wasm: jsonWasm },
-  { filetype: "yaml", extensions: [".yaml", ".yml"], highlights: [yamlHighlights], wasm: yamlWasm },
-  { filetype: "markdown", extensions: [".md", ".mdx"], highlights: [markdownBundledHighlights, markdownInlineBundledHighlights] },
-  { filetype: "zig", extensions: [".zig"], highlights: [zigBundledHighlights] },
+  { extensions: [".js", ".jsx"], filetype: "javascript", highlights: [jsBundledHighlights] },
+  { extensions: [".sh", ".bash", ".zsh"], filetype: "bash", highlights: [bashHighlights], wasm: bashWasm },
+  { extensions: [".json", ".jsonc"], filetype: "json", highlights: [jsonHighlights], wasm: jsonWasm },
+  { extensions: [".yaml", ".yml"], filetype: "yaml", highlights: [yamlHighlights], wasm: yamlWasm },
+  { extensions: [".md", ".mdx"], filetype: "markdown", highlights: [markdownBundledHighlights, markdownInlineBundledHighlights] },
+  { extensions: [".zig"], filetype: "zig", highlights: [zigBundledHighlights] },
 ]

@@ -7,11 +7,11 @@ import { parsePatch } from "../src/patch"
 
 describe("textContent", () => {
   test("normalizes the trailing newline and counts lines", () => {
-    expect(textContent("a\nb\n", true)).toEqual({ kind: "text", content: "a\nb", lineCount: 2, truncated: false })
+    expect(textContent("a\nb\n", true)).toEqual({ content: "a\nb", kind: "text", lineCount: 2, truncated: false })
   })
 
   test("handles empty files", () => {
-    expect(textContent("", true)).toEqual({ kind: "text", content: "", lineCount: 0, truncated: false })
+    expect(textContent("", true)).toEqual({ content: "", kind: "text", lineCount: 0, truncated: false })
   })
 
   test("truncates long files unless full is requested", () => {
@@ -43,7 +43,7 @@ describe("loadFileContent", () => {
 
   test("reads text files from disk", () => {
     writeFileSync(join(dir, "a.ts"), "const a = 1\n")
-    expect(loadFileContent(dir, "a.ts", { full: false })).toEqual({ kind: "text", content: "const a = 1", lineCount: 1, truncated: false })
+    expect(loadFileContent(dir, "a.ts", { full: false })).toEqual({ content: "const a = 1", kind: "text", lineCount: 1, truncated: false })
   })
 
   test("detects binary files", () => {

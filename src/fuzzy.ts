@@ -1,6 +1,6 @@
 const separators = new Set(["/", ".", "-", "_"])
 
-export type RankOptions = {
+export interface RankOptions {
   lastChangedAt: Map<string, number>
   changed: Set<string>
   limit: number
@@ -14,9 +14,9 @@ export function fuzzyMatch(query: string, path: string): number | undefined {
   const q = query.toLowerCase()
   const p = path.toLowerCase()
 
-  // greedy scanning from the first occurrence alone mis-scores paths like
+  // Greedy scanning from the first occurrence alone mis-scores paths like
   // "src/cli.ts" for "cli" (the stray c in "src" eats the match), so try each
-  // occurrence of the first query char and keep the best alignment
+  // Occurrence of the first query char and keep the best alignment
   let best: number | undefined
   for (let index = 0; index < p.length; index += 1) {
     if (p[index] !== q[0]) {

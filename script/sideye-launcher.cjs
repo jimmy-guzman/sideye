@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// npm launcher: resolves the platform-specific sideye binary package and execs it.
+// Npm launcher: resolves the platform-specific sideye binary package and execs it.
 // Pattern from opencode's bin launcher (anomalyco/opencode packages/opencode/bin/opencode).
 
 const childProcess = require("node:child_process")
@@ -23,7 +23,7 @@ function run(target) {
       try {
         child.kill(signal)
       } catch {
-        // the child may have already exited
+        // The child may have already exited
       }
     })
   }

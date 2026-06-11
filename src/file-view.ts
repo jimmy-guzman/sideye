@@ -8,9 +8,9 @@ export type FileContent =
   | { kind: "too-large"; bytes: number }
 
 export const MAX_FILE_BYTES = 1_000_000
-export const MAX_FILE_LINES = 5_000
+export const MAX_FILE_LINES = 5000
 
-export type LoadFileContentOptions = {
+export interface LoadFileContentOptions {
   full: boolean
   gitSpec?: string
 }
@@ -37,7 +37,7 @@ export function loadFileContent(repoRoot: string, path: string, options: LoadFil
   }
 
   if (size > MAX_FILE_BYTES && !options.full) {
-    return { kind: "too-large", bytes: size }
+    return { bytes: size, kind: "too-large" }
   }
 
   let buffer: Buffer
@@ -47,7 +47,7 @@ export function loadFileContent(repoRoot: string, path: string, options: LoadFil
     return { kind: "missing" }
   }
 
-  if (buffer.subarray(0, 8_000).includes(0)) {
+  if (buffer.subarray(0, 8000).includes(0)) {
     return { kind: "binary" }
   }
 
@@ -59,10 +59,10 @@ export function textContent(content: string, full: boolean): FileContent {
   const lines = normalized === "" ? [] : normalized.split("\n")
 
   if (!full && lines.length > MAX_FILE_LINES) {
-    return { kind: "text", content: lines.slice(0, MAX_FILE_LINES).join("\n"), lineCount: lines.length, truncated: true }
+    return { content: lines.slice(0, MAX_FILE_LINES).join("\n"), kind: "text", lineCount: lines.length, truncated: true }
   }
 
-  return { kind: "text", content: normalized, lineCount: lines.length, truncated: false }
+  return { content: normalized, kind: "text", lineCount: lines.length, truncated: false }
 }
 
 export function contentToContextPatch(path: string, content: string) {

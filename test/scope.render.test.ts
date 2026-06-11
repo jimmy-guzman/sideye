@@ -10,7 +10,7 @@ import { createFixtureRepo, disabledSyntax, makeSettleUntil } from "../test/help
 
 describe("scope switching", () => {
   test("re-runs checks for the new scope's changed set", async () => {
-    // the lint script crashes, so the initial run must surface an explicit failure
+    // The lint script crashes, so the initial run must surface an explicit failure
     const repoRoot = createFixtureRepo("sideye-scope-", {
       "package.json": `${JSON.stringify({ scripts: { lint: "exit 2", typecheck: "exit 0" } })}\n`,
       "src/a.ts": "const a = 1\n",
@@ -18,23 +18,23 @@ describe("scope switching", () => {
     writeFileSync(join(repoRoot, "src", "a.ts"), "const a = 2\n")
 
     const model = await loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await createTestRenderer({ width: 120, height: 34 })
-    const settleUntil = makeSettleUntil({ renderOnce, captureCharFrame })
+    const { renderer, renderOnce, captureCharFrame, mockInput } = await createTestRenderer({ height: 34, width: 120 })
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce })
 
     try {
       createRoot(renderer).render(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax: disabledSyntax }))
       const failed = await settleUntil("failed lint run", (frame) => frame.includes("lint failed:"), 5)
       expect(failed).toContain("fail")
 
-      // the staged scope has no changes, so a re-run finishes without failures;
-      // that status can only appear if the scope switch re-ran checks
+      // The staged scope has no changes, so a re-run finishes without failures;
+      // That status can only appear if the scope switch re-ran checks
       mockInput.pressKey("s")
       const after = await settleUntil("recheck after scope switch", (frame) => frame.includes("checks finished"))
       expect(after).toContain("staged vs HEAD")
       expect(after).not.toContain("lint failed:")
     } finally {
       renderer.destroy()
-      rmSync(repoRoot, { recursive: true, force: true })
+      rmSync(repoRoot, { force: true, recursive: true })
     }
   }, 20_000)
 })

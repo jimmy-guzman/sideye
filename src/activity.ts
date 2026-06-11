@@ -1,30 +1,30 @@
 export type ActivityEventKind = "changed" | "appeared" | "removed"
 
-export type ActivityEvent = {
+export interface ActivityEvent {
   path: string
   at: number
   kind: ActivityEventKind
 }
 
-export type ActivityLog = {
+export interface ActivityLog {
   events: ActivityEvent[]
 }
 
 export type RecencyLevel = "fresh" | "recent" | "none"
 
-export const FRESH_MS = 5_000
+export const FRESH_MS = 5000
 export const RECENT_MS = 30_000
 
-const MAX_EVENTS = 1_000
+const MAX_EVENTS = 1000
 
 export const emptyActivityLog: ActivityLog = { events: [] }
 
-export function recordActivity(log: ActivityLog, entries: Array<{ path: string; kind: ActivityEventKind }>, now: number): ActivityLog {
+export function recordActivity(log: ActivityLog, entries: { path: string; kind: ActivityEventKind }[], now: number): ActivityLog {
   if (entries.length === 0) {
     return log
   }
 
-  const events = [...log.events, ...entries.map((entry) => ({ path: entry.path, kind: entry.kind, at: now }))]
+  const events = [...log.events, ...entries.map((entry) => ({ at: now, kind: entry.kind, path: entry.path }))]
   return { events: events.length > MAX_EVENTS ? events.slice(events.length - MAX_EVENTS) : events }
 }
 
