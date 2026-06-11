@@ -71,7 +71,7 @@ export function markPending(state: CheckerState, files: ChangedFile[], changedPa
 }
 
 export function directorySummary(path: string, state: CheckerState) {
-  const prefix = `${path}/`
+  const prefix = path === "" ? "" : `${path}/`
   let pending = false
   let failed = false
   const diagnostics: Diagnostic[] = []

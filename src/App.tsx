@@ -982,6 +982,14 @@ const TreeRow = memo(function TreeRow({ row, focused, selectedPath, expandedDire
           {summary !== null && summary.errors > 0 ? <text fg="#ff5c8a">{`✖${summary.errors} `}</text> : null}
           {summary !== null && summary.errors === 0 && summary.warnings > 0 ? <text fg="#fbbf24">{`⚠${summary.warnings} `}</text> : null}
           {summary?.pending ? <text fg="#71717a">… </text> : null}
+          {summary !== null &&
+          node.changedCount > 0 &&
+          !summary.failed &&
+          !summary.pending &&
+          summary.errors === 0 &&
+          summary.warnings === 0 ? (
+            <text fg="#3ddc84">✓ </text>
+          ) : null}
           {node.changedCount > 0 ? (
             <text fg={node.stage !== undefined ? stageColor(node.stage) : "#71717a"}>{`+${node.additions} -${node.deletions}`}</text>
           ) : null}
