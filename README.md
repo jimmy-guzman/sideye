@@ -16,6 +16,8 @@ becoming part of the agent loop. It does not review code, approve changes, talk
 to the agent, or manage a workflow. It shows you the repo, the diff, and the
 problems. You decide what to say next.
 
+![sideye showing the repo tree, a diff, and diagnostics streaming into the problems panel](assets/screenshots/sideye.png)
+
 ## What it does
 
 - Shows the full repo tree, including tracked files and untracked files that are
@@ -36,6 +38,26 @@ problems. You decide what to say next.
 
 The git-backed file tree renders first. Diagnostics come in later as decorations.
 That keeps the basic view useful even when checks are still running.
+
+### Switch worktrees
+
+Press `w` to jump between git worktrees without leaving the view. The tree,
+diffs, polling, and checks all re-point at the chosen worktree.
+
+![worktree picker listing worktrees, including one marked prunable](assets/screenshots/worktree-picker.png)
+
+### Go to file
+
+Press `ctrl-p` to fuzzy-search the whole repo and open any file.
+
+![go-to-file overlay fuzzy-matching paths across the repo](assets/screenshots/go-to-file.png)
+
+### Problems
+
+Typecheck and lint findings stream into a problems panel as checks finish.
+Press `p` to open it and `enter` to jump to a finding.
+
+![problems panel listing typecheck errors and lint warnings with file locations](assets/screenshots/problems.png)
 
 ## Install
 
@@ -83,6 +105,10 @@ sideye --unstaged # start in the unstaged scope
 | `g` / `G`   | jump to first / last line                         |
 | `?`         | show all keybindings                              |
 | `q` / `esc` | quit (esc closes the problems panel first)        |
+
+Press `?` anytime to see the full list in the app:
+
+![keybindings help overlay showing all shortcuts](assets/screenshots/keys.png)
 
 ## Requirements
 
