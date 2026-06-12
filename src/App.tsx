@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs"
+import { basename } from "node:path"
 import packageJson from "../package.json"
 import { RGBA, type DiffRenderable, type LineColorConfig, type ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react"
@@ -21,8 +23,8 @@ import {
 } from "./diagnostics"
 import { contentToContextPatch, loadFileContent, type FileContent } from "./file-view"
 import { rankFiles } from "./fuzzy"
-import type { ChangedFile, GitModel, StageState } from "./git"
-import { loadChangedFiles, loadFileDiff, loadRepoFiles, mergeChanged } from "./git"
+import type { ChangedFile, GitModel, StageState, Worktree } from "./git"
+import { listWorktrees, loadChangedFiles, loadFileDiff, loadGitModel, loadRepoFiles, mergeChanged } from "./git"
 import { lineReference, renderPatch, type ParsedDiffLine } from "./patch"
 import { diffFiletypeFor, type SyntaxConfig } from "./syntax"
 import {
@@ -91,6 +93,10 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [paletteQuery, setPaletteQuery] = useState("")
   const [paletteIndex, setPaletteIndex] = useState(0)
+  const [worktreeOpen, setWorktreeOpen] = useState(false)
+  const [worktreeIndex, setWorktreeIndex] = useState(0)
+  const [worktrees, setWorktrees] = useState<Worktree[] | undefined>(undefined)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [cursorIndex, setCursorIndex] = useState(0)
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | undefined>(undefined)
   const [checksInFlight, setChecksInFlight] = useState(0)
@@ -99,6 +105,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const sidebarRef = useRef<ScrollBoxRenderable>(null)
   const problemsRef = useRef<ScrollBoxRenderable>(null)
   const paletteRef = useRef<ScrollBoxRenderable>(null)
+  const worktreeRef = useRef<ScrollBoxRenderable>(null)
   const diffRef = useRef<DiffRenderable>(null)
   const previousChangedRef = useRef<ChangedFile[]>(initialModel.changed)
   const previousScopeKeyRef = useRef(initialModel.scopeKey)
@@ -202,19 +209,19 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   )
   const truncated = renderedPatch.truncated || (fileContent?.kind === "text" && fileContent.truncated)
 
-  function runChecks() {
+  function runChecks(target: GitModel = model) {
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
     const generation = runGenerationRef.current + 1
     runGenerationRef.current = generation
 
-    setCheckerState(initialCheckerState(model.changed))
+    setCheckerState(initialCheckerState(target.changed))
     setChecksInFlight((count) => count + 1)
     const failures: string[] = []
     return runDiagnostics(
-      model.repoRoot,
-      model.changed,
+      target.repoRoot,
+      target.changed,
       (checker, nextState) => {
         // A newer run owns the state; drop results arriving from a stale run
         if (generation !== runGenerationRef.current) {
@@ -250,6 +257,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   }, [])
 
   const lastChangeRef = useRef<number>(Date.now())
+  const repoRoot = model.repoRoot
 
   useEffect(() => {
     let cancelled = false
@@ -262,9 +270,10 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       }
       fastInFlight = true
       try {
-        const next = await loadChangedFiles(initialModel.repoRoot, scope)
+        const next = await loadChangedFiles(repoRoot, scope)
         if (!cancelled) {
-          setModel((previous) => mergeChanged(previous, next))
+          // A worktree switch may commit between this poll starting and landing
+          setModel((previous) => (previous.repoRoot === repoRoot ? mergeChanged(previous, next) : previous))
         }
       } catch {
         // Transient git failures (e.g. an agent holding index.lock) resolve on the next poll
@@ -279,10 +288,10 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       }
       slowInFlight = true
       try {
-        const next = await loadRepoFiles(initialModel.repoRoot)
+        const next = await loadRepoFiles(repoRoot)
         if (!cancelled) {
           setModel((previous) =>
-            previous.repoFilesKey === next.repoFilesKey
+            previous.repoRoot !== repoRoot || previous.repoFilesKey === next.repoFilesKey
               ? previous
               : { ...previous, repoFiles: next.repoFiles, repoFilesKey: next.repoFilesKey },
           )
@@ -321,7 +330,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       clearTimeout(fastId)
       clearInterval(slowId)
     }
-  }, [initialModel.repoRoot, scope])
+  }, [repoRoot, scope])
 
   useEffect(() => {
     const previousByPath = new Map(previousChangedRef.current.map((file) => [file.path, file]))
@@ -414,6 +423,12 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       paletteRef.current?.scrollChildIntoView(`palette-${paletteIndex}`)
     }
   }, [paletteIndex, paletteOpen])
+
+  useEffect(() => {
+    if (worktreeOpen) {
+      worktreeRef.current?.scrollChildIntoView(`worktree-${worktreeIndex}`)
+    }
+  }, [worktreeIndex, worktreeOpen])
 
   useEffect(() => {
     const firstChanged = navigableLines.findIndex((line) => line.type !== "context")
@@ -520,6 +535,32 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   }, [baseLineColors, cursorIndex, navigableLines, viewerHeight, renderer])
 
   useKeyboard((key) => {
+    if (helpOpen) {
+      if (key.name === "escape" || key.name === "?" || key.name === "q") {
+        setHelpOpen(false)
+      }
+      // Every other key belongs to the help overlay
+      return
+    }
+
+    if (worktreeOpen) {
+      const lastIndex = Math.max(0, (worktrees?.length ?? 1) - 1)
+      if (key.name === "escape" || key.name === "w") {
+        setWorktreeOpen(false)
+      } else if (key.name === "j" || key.name === "down") {
+        setWorktreeIndex((current) => Math.min(current + 1, lastIndex))
+      } else if (key.name === "k" || key.name === "up") {
+        setWorktreeIndex((current) => Math.max(current - 1, 0))
+      } else if (key.name === "return") {
+        const worktree = worktrees?.[worktreeIndex]
+        if (worktree !== undefined) {
+          void switchWorktree(worktree)
+        }
+      }
+      // Every other key belongs to the picker
+      return
+    }
+
     if (paletteOpen) {
       if (key.name === "escape") {
         setPaletteOpen(false)
@@ -574,6 +615,34 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
         }
         return !open
       })
+      return
+    }
+
+    if (key.name === "?") {
+      setHelpOpen(true)
+      return
+    }
+
+    if (key.name === "w") {
+      setWorktreeOpen(true)
+      setWorktreeIndex(0)
+      setWorktrees(undefined)
+      void listWorktrees(model.repoRoot)
+        .then((list) => {
+          // Bare entries have no files to review
+          const selectable = list.filter((worktree) => !worktree.bare)
+          setWorktrees(selectable)
+          setWorktreeIndex(
+            Math.max(
+              0,
+              selectable.findIndex((worktree) => worktree.path === model.repoRoot),
+            ),
+          )
+        })
+        .catch((error: unknown) => {
+          setWorktreeOpen(false)
+          setStatus(error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error))
+        })
       return
     }
 
@@ -734,6 +803,46 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     renderer.destroy()
   }
 
+  async function switchWorktree(worktree: Worktree) {
+    setWorktreeOpen(false)
+    if (worktree.path === model.repoRoot) {
+      return
+    }
+
+    if (!existsSync(worktree.path)) {
+      setStatus(`worktree missing: ${worktree.path}`)
+      return
+    }
+
+    try {
+      const fresh = await loadGitModel(worktree.path, scope)
+      abortRef.current?.abort()
+      // Prime the activity refs so the swap is not mistaken for agent edits;
+      // ScopeKey matches across worktrees, so that effect will not re-run checks
+      previousChangedRef.current = fresh.changed
+      previousScopeKeyRef.current = fresh.scopeKey
+      lastChangeRef.current = Date.now()
+      setModel(fresh)
+      const selected = fresh.changed[0]?.path ?? fresh.repoFiles[0]?.path
+      setSelectedPath(selected)
+      setFocusedRowIndex(0)
+      setExpandedDirectories(() => {
+        const expanded = defaultExpandedDirectories(fresh.changed.map((file) => file.path))
+        return selected === undefined ? expanded : expandAncestorsForPath(expanded, selected)
+      })
+      setFullContentPaths(new Set())
+      setFileView(false)
+      setJumpTarget(undefined)
+      setProblemIndex(0)
+      setActivityLog(emptyActivityLog)
+      setFocusedPane("tree")
+      setStatus(`worktree: ${worktreeLabel(worktree)}`)
+      void runChecksRef.current(fresh)
+    } catch (error) {
+      setStatus(error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error))
+    }
+  }
+
   const selectFile = useCallback((path: string) => {
     setSelectedPath(path)
     setFileView(false)
@@ -764,13 +873,15 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const activityText =
     latest === undefined || now - latest.at >= RECENT_MS ? "" : `${Math.max(0, Math.round((now - latest.at) / 1000))}s ago ${latest.path}`
   const displayStatus = checksInFlight > 0 ? "running checks…" : status
+  const hints = "? keys · q quit"
+  // The hints are navigation; the status is transient and yields on narrow terminals
   const statusRight = truncate(
     cursorFindings?.[0] !== undefined
       ? `${cursorFindings[0].checker}: ${cursorFindings[0].message}`
       : [activityText, truncated === true ? `${displayStatus} · truncated; f for full` : displayStatus]
           .filter((part) => part !== "")
           .join(" · "),
-    Math.max(20, width - 50),
+    Math.max(10, Math.min(width - 50, width - hints.length - 4)),
   )
   const countsText = `${counts.errors > 0 ? `✖${counts.errors}` : ""}${counts.warnings > 0 ? ` ⚠${counts.warnings}` : ""}`.trim()
 
@@ -782,7 +893,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
           <text fg="#52525b">@{packageJson.version}</text>
         </box>
         <text fg="#a1a1aa">
-          {scopeLabel(scope)} · {model.changed.length} changed{countsText === "" ? "" : ` · ${countsText}`}
+          {basename(model.repoRoot)} · {scopeLabel(scope)} · {model.changed.length} changed{countsText === "" ? "" : ` · ${countsText}`}
         </text>
       </box>
       <box flexGrow={1} flexDirection="row">
@@ -912,7 +1023,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
         </box>
       ) : null}
       <box height={1} flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1} backgroundColor="#111113">
-        <text fg="#71717a">{keyHints(focusedPane)}</text>
+        <text fg="#71717a">{hints}</text>
         <text fg="#a1a1aa">{statusRight}</text>
       </box>
       {paletteOpen ? (
@@ -973,6 +1084,100 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
                 // oxlint-enable react/no-array-index-key
               })
             )}
+          </scrollbox>
+        </box>
+      ) : null}
+      {worktreeOpen ? (
+        <box
+          position="absolute"
+          left={paletteLeft}
+          top={1}
+          width={paletteWidth}
+          flexDirection="column"
+          borderStyle="single"
+          borderColor="#ff4fb8"
+          backgroundColor="#111113"
+          zIndex={100}
+        >
+          <box height={1} paddingLeft={1} backgroundColor="#111113">
+            <text fg="#ff4fb8">worktrees</text>
+          </box>
+          <scrollbox ref={worktreeRef} width="100%" height={Math.min(12, Math.max(1, worktrees?.length ?? 1))} scrollY viewportCulling>
+            {worktrees === undefined ? (
+              <box id="worktree-loading" paddingLeft={1}>
+                <text fg="#71717a">loading…</text>
+              </box>
+            ) : worktrees.length === 0 ? (
+              <box id="worktree-empty" paddingLeft={1}>
+                <text fg="#71717a">no worktrees</text>
+              </box>
+            ) : (
+              worktrees.map((worktree, index) => {
+                const current = worktree.path === model.repoRoot
+                const badges = [worktree.locked ? "locked" : "", worktree.prunable ? "prunable" : ""]
+                  .filter((badge) => badge !== "")
+                  .join(" ")
+                // Key and id both by index: reordering results must never
+                // Change a live renderable's id or the scrollbox loses rows
+                // oxlint-disable react/no-array-index-key -- intentional: stable id-by-index required by scrollbox
+                return (
+                  <box
+                    key={`worktree-${index}`}
+                    id={`worktree-${index}`}
+                    width="100%"
+                    flexDirection="row"
+                    justifyContent="space-between"
+                    paddingLeft={1}
+                    paddingRight={1}
+                    backgroundColor={index === worktreeIndex ? CURSOR_BG_HEX : "#111113"}
+                  >
+                    <text fg={index === worktreeIndex ? "#ffffff" : current ? "#ff4fb8" : "#d4d4d8"}>
+                      {`${current ? "● " : "  "}${worktreeLabel(worktree)}`}
+                    </text>
+                    <box flexDirection="row">
+                      {badges === "" ? null : <text fg="#fbbf24">{`${badges} `}</text>}
+                      <text fg="#71717a">
+                        {truncateLeft(collapseHome(worktree.path), Math.max(10, paletteWidth - worktreeLabel(worktree).length - 16))}
+                      </text>
+                    </box>
+                  </box>
+                )
+                // oxlint-enable react/no-array-index-key
+              })
+            )}
+          </scrollbox>
+        </box>
+      ) : null}
+      {helpOpen ? (
+        <box
+          position="absolute"
+          left={paletteLeft}
+          top={1}
+          width={paletteWidth}
+          flexDirection="column"
+          borderStyle="single"
+          borderColor="#ff4fb8"
+          backgroundColor="#111113"
+          zIndex={100}
+        >
+          <box height={1} paddingLeft={1} backgroundColor="#111113">
+            <text fg="#ff4fb8">keys</text>
+          </box>
+          <scrollbox width="100%" height={Math.min(KEY_HELP.length, Math.max(1, height - 6))} scrollY viewportCulling>
+            {KEY_HELP.map(([combo, action]) => (
+              <box
+                key={combo}
+                id={`help-${combo}`}
+                width="100%"
+                flexDirection="row"
+                paddingLeft={1}
+                paddingRight={1}
+                backgroundColor="#111113"
+              >
+                <text fg="#ff4fb8">{combo.padEnd(11)}</text>
+                <text fg="#a1a1aa">{action}</text>
+              </box>
+            ))}
           </scrollbox>
         </box>
       ) : null}
@@ -1146,6 +1351,25 @@ function truncate(text: string, max: number) {
   return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`
 }
 
+function worktreeLabel(worktree: Worktree) {
+  return worktree.branch ?? `${worktree.head.slice(0, 7)} (detached)`
+}
+
+function collapseHome(path: string) {
+  const home = process.env["HOME"]
+  return home !== undefined && home !== "" && path.startsWith(home) ? `~${path.slice(home.length)}` : path
+}
+
+function truncateLeft(text: string, max: number) {
+  if (text.length <= max) {
+    return text
+  }
+  if (max <= 1) {
+    return max === 1 ? "…" : ""
+  }
+  return `…${text.slice(text.length - (max - 1))}`
+}
+
 function truncateName(name: string, max: number) {
   if (name.length <= max) {
     return name
@@ -1174,17 +1398,29 @@ function placeholderText(content: FileContent) {
   return "file not found"
 }
 
-function keyHints(pane: "tree" | "diff" | "problems") {
-  if (pane === "problems") {
-    return "j/k problem · enter jump · p close · q quit"
-  }
-
-  if (pane === "diff") {
-    return "j/k · v file/diff · y copy · ctrl-p goto · b tree · p problems · q quit"
-  }
-
-  return "j/k · h/l fold · ctrl-p goto · s scope · c changes · b tree · p problems · q quit"
-}
+// Mirrors the Keys table in README.md
+const KEY_HELP: [combo: string, action: string][] = [
+  ["j / k", "move in the tree, viewer, or problems panel"],
+  ["h / l", "collapse / expand folders"],
+  ["tab", "switch focus between tree and viewer"],
+  ["enter", "open the focused item / jump to a problem"],
+  ["ctrl-p", "go to file: fuzzy-search the whole repo"],
+  ["s", "cycle scope: all changes → staged → unstaged"],
+  ["w", "switch to another git worktree"],
+  ["c", "toggle changes-only filter for the tree"],
+  ["v", "toggle diff ↔ full file view for a changed file"],
+  ["p", "toggle the problems panel"],
+  ["b", "toggle the file tree sidebar"],
+  [".", "jump to the most recently changed file"],
+  ["n", "jump to the next file with findings"],
+  ["y", "copy path:line + snippet at the cursor"],
+  ["f", "load full content when truncated"],
+  ["r", "re-run checks"],
+  ["ctrl-d/u", "half-page cursor movement in the viewer"],
+  ["g / G", "jump to first / last line"],
+  ["?", "show all keybindings"],
+  ["q / esc", "quit (esc closes panels first)"],
+]
 
 function stageColor(stage: StageState) {
   if (stage === "staged") {

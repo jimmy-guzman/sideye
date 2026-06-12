@@ -25,6 +25,8 @@ problems. You decide what to say next.
 - Opens unchanged files read-only, with syntax highlighting.
 - Opens changed files as diffs, with a toggle for the full file.
 - Switches between all changes, staged changes, and unstaged changes.
+- Switches between git worktrees in place, re-pointing the tree, diffs, and
+  checks at the chosen worktree.
 - Polls git while the agent works, then keeps the current file and selection
   stable as the view refreshes.
 - Marks recent activity and lets you jump to the latest touched file.
@@ -67,6 +69,7 @@ sideye --unstaged # start in the unstaged scope
 | `enter`     | open the focused item / jump to a problem         |
 | `ctrl-p`    | go to file: fuzzy-search the whole repo           |
 | `s`         | cycle scope: all changes -> staged -> unstaged    |
+| `w`         | switch to another git worktree                    |
 | `c`         | toggle changes-only filter for the tree           |
 | `v`         | toggle diff <-> full file view for a changed file |
 | `p`         | toggle the problems panel                         |
@@ -78,6 +81,7 @@ sideye --unstaged # start in the unstaged scope
 | `r`         | re-run checks                                     |
 | `ctrl-d/u`  | half-page cursor movement in the viewer           |
 | `g` / `G`   | jump to first / last line                         |
+| `?`         | show all keybindings                              |
 | `q` / `esc` | quit (esc closes the problems panel first)        |
 
 ## Requirements

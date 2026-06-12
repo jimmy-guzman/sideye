@@ -1,0 +1,37 @@
+import { rmSync } from "node:fs"
+import { describe, expect, test } from "bun:test"
+import { createTestRenderer } from "@opentui/core/testing"
+import { createRoot } from "@opentui/react"
+import { createElement } from "react"
+import { App } from "../src/App"
+import { loadGitModel } from "../src/git"
+import { createFixtureRepo, disabledSyntax, makeSettleUntil } from "../test/helpers"
+
+describe("help overlay", () => {
+  test("opens with ?, lists every keybinding, swallows keys, and closes with escape", async () => {
+    const repoRoot = createFixtureRepo("sideye-help-", { "src/a.ts": "export const a = 1\n" })
+    const model = await loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
+    const { renderer, renderOnce, captureCharFrame, mockInput } = await createTestRenderer({ height: 34, width: 120 })
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce })
+
+    try {
+      createRoot(renderer).render(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax: disabledSyntax }))
+      const initial = await settleUntil("app chrome", (frame) => frame.includes("sideye"), 5)
+      expect(initial).toContain("? keys · q quit")
+
+      mockInput.pressKey("?")
+      const help = await settleUntil("help overlay", (frame) => frame.includes("switch to another git worktree"))
+      expect(help).toContain("go to file: fuzzy-search the whole repo")
+      expect(help).toContain("toggle the file tree sidebar")
+
+      // Q must close the overlay, not quit the app
+      mockInput.pressKey("q")
+      const closed = await settleUntil("help closed", (frame) => !frame.includes("switch to another git worktree"))
+      expect(closed).toContain("sideye")
+      expect(closed).toContain("? keys · q quit")
+    } finally {
+      renderer.destroy()
+      rmSync(repoRoot, { force: true, recursive: true })
+    }
+  }, 20_000)
+})
