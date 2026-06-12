@@ -40,8 +40,66 @@ interface StatusEntry {
   kind: ChangeKind
 }
 
+export interface Worktree {
+  path: string
+  head: string
+  branch?: string
+  detached: boolean
+  bare: boolean
+  locked: boolean
+  prunable: boolean
+}
+
 export function resolveRepoRoot(cwd: string) {
   return runCommand(["git", "rev-parse", "--show-toplevel"], cwd).stdout.trim()
+}
+
+export async function listWorktrees(repoRoot: string): Promise<Worktree[]> {
+  const result = await runCommandAsync(["git", "worktree", "list", "--porcelain", "-z"], repoRoot)
+  return parseWorktreeList(result.stdout)
+}
+
+export function parseWorktreeList(output: string): Worktree[] {
+  const worktrees: Worktree[] = []
+
+  // With -z every attribute line ends in NUL and each record ends in an extra NUL
+  for (const record of output.split("\0\0")) {
+    const attributes = record.split("\0").filter((line) => line !== "")
+    const first = attributes[0]
+    if (first === undefined || !first.startsWith("worktree ")) {
+      continue
+    }
+
+    const worktree: Worktree = {
+      bare: false,
+      detached: false,
+      head: "",
+      locked: false,
+      path: first.slice("worktree ".length),
+      prunable: false,
+    }
+
+    for (const attribute of attributes.slice(1)) {
+      if (attribute.startsWith("HEAD ")) {
+        worktree.head = attribute.slice("HEAD ".length)
+      } else if (attribute.startsWith("branch ")) {
+        const ref = attribute.slice("branch ".length)
+        worktree.branch = ref.startsWith("refs/heads/") ? ref.slice("refs/heads/".length) : ref
+      } else if (attribute === "bare") {
+        worktree.bare = true
+      } else if (attribute === "detached") {
+        worktree.detached = true
+      } else if (attribute === "locked" || attribute.startsWith("locked ")) {
+        worktree.locked = true
+      } else if (attribute === "prunable" || attribute.startsWith("prunable ")) {
+        worktree.prunable = true
+      }
+    }
+
+    worktrees.push(worktree)
+  }
+
+  return worktrees
 }
 
 export async function loadChangedFiles(
