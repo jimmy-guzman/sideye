@@ -1,4 +1,4 @@
-export type CommandResult = {
+export interface CommandResult {
   exitCode: number
   stdout: string
   stderr: string
@@ -14,15 +14,15 @@ export function runCommand(command: string[], cwd: string, allowedExitCodes = [0
   const result = Bun.spawnSync({
     cmd: command,
     cwd,
+    stderr: "pipe",
     ...(stdin === undefined ? {} : { stdin: new Blob([stdin]) }),
     stdout: "pipe",
-    stderr: "pipe",
   })
 
   const output: CommandResult = {
     exitCode: result.exitCode,
-    stdout: new TextDecoder().decode(result.stdout),
     stderr: new TextDecoder().decode(result.stderr),
+    stdout: new TextDecoder().decode(result.stdout),
   }
 
   if (!allowedExitCodes.includes(output.exitCode)) {
@@ -36,11 +36,13 @@ export async function runCommandAsync(command: string[], cwd: string, allowedExi
   const child = Bun.spawn({
     cmd: command,
     cwd,
-    stdout: "pipe",
     stderr: "pipe",
+    stdout: "pipe",
   })
 
-  const kill = () => child.kill()
+  function kill() {
+    child.kill()
+  }
   if (signal?.aborted === true) {
     kill()
   } else {
@@ -54,7 +56,7 @@ export async function runCommandAsync(command: string[], cwd: string, allowedExi
       child.exited,
     ])
 
-    const result = { exitCode, stdout, stderr }
+    const result = { exitCode, stderr, stdout }
 
     if (!allowedExitCodes.includes(exitCode)) {
       throw commandFailedError(command, result)

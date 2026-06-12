@@ -7,7 +7,7 @@ export type ChangeKind = "modified" | "added" | "deleted" | "renamed" | "untrack
 
 export type StageState = "staged" | "unstaged" | "mixed" | "untracked"
 
-export type ChangedFile = {
+export interface ChangedFile {
   path: string
   oldPath?: string
   kind: ChangeKind
@@ -16,16 +16,16 @@ export type ChangedFile = {
   deletions: number
   binary: boolean
   warnings: string[]
-  // worktree mtime so edits that keep the churn counts identical still register
+  // Worktree mtime so edits that keep the churn counts identical still register
   mtimeMs: number
 }
 
-export type RepoFile = {
+export interface RepoFile {
   path: string
   tracked: boolean
 }
 
-export type GitModel = {
+export interface GitModel {
   repoRoot: string
   scopeKey: string
   changed: ChangedFile[]
@@ -34,7 +34,7 @@ export type GitModel = {
   repoFilesKey: string
 }
 
-type StatusEntry = {
+interface StatusEntry {
   path: string
   oldPath?: string
   kind: ChangeKind
@@ -63,22 +63,22 @@ export async function loadChangedFiles(
   const stageByPath = parsePorcelainStatus(porcelain.stdout)
   const paths = new Set([...numstatByPath.keys(), ...statusByPath.keys()])
 
-  const changed = Array.from(paths)
+  const changed = [...paths]
     .map((path) => {
       const stat = numstatByPath.get(path)
       const statusEntry = statusByPath.get(path)
       const kind = statusEntry?.kind ?? inferKind(path, stat?.deletions ?? 0, stat?.additions ?? 0)
       const untrackedStat = kind === "untracked" && stat === undefined ? statUntrackedFile(repoRoot, path) : undefined
       const file: ChangedFile = {
-        path,
-        oldPath: statusEntry?.oldPath,
-        kind,
-        stage: stageByPath.get(path) ?? (kind === "untracked" ? "untracked" : "unstaged"),
         additions: stat?.additions ?? untrackedStat?.additions ?? 0,
-        deletions: stat?.deletions ?? 0,
         binary: stat?.binary ?? untrackedStat?.binary ?? false,
-        warnings: warningsFor(path, kind, stat?.additions ?? untrackedStat?.additions ?? 0, stat?.deletions ?? 0),
+        deletions: stat?.deletions ?? 0,
+        kind,
         mtimeMs: kind === "deleted" ? 0 : fileMtime(repoRoot, path),
+        oldPath: statusEntry?.oldPath,
+        path,
+        stage: stageByPath.get(path) ?? (kind === "untracked" ? "untracked" : "unstaged"),
+        warnings: warningsFor(path, kind, stat?.additions ?? untrackedStat?.additions ?? 0, stat?.deletions ?? 0),
       }
       return file
     })
@@ -115,13 +115,13 @@ export function mergeChanged(prev: GitModel, next: Pick<GitModel, "changed" | "c
   })
 
   // If every entry in changed is the same reference as next.changed[index], no
-  // file was reused from prev — skip building a new Map and return next's
-  // references directly.
+  // File was reused from prev — skip building a new Map and return next's
+  // References directly.
   if (prev.scopeKey === next.scopeKey && changed.every((file, index) => file === next.changed[index])) {
-    return { ...prev, scopeKey: next.scopeKey, changed: next.changed, changedByPath: next.changedByPath }
+    return { ...prev, changed: next.changed, changedByPath: next.changedByPath, scopeKey: next.scopeKey }
   }
 
-  return { ...prev, scopeKey: next.scopeKey, changed, changedByPath: new Map(changed.map((file) => [file.path, file])) }
+  return { ...prev, changed, changedByPath: new Map(changed.map((file) => [file.path, file])), scopeKey: next.scopeKey }
 }
 
 export async function loadGitModel(repoRoot: string, scope: DiffScope): Promise<GitModel> {
@@ -143,22 +143,22 @@ export async function loadGitModel(repoRoot: string, scope: DiffScope): Promise<
   const stageByPath = parsePorcelainStatus(porcelain.stdout)
   const paths = new Set([...numstatByPath.keys(), ...statusByPath.keys()])
 
-  const changed = Array.from(paths)
+  const changed = [...paths]
     .map((path) => {
       const stat = numstatByPath.get(path)
       const statusEntry = statusByPath.get(path)
       const kind = statusEntry?.kind ?? inferKind(path, stat?.deletions ?? 0, stat?.additions ?? 0)
       const untrackedStat = kind === "untracked" && stat === undefined ? statUntrackedFile(repoRoot, path) : undefined
       const file: ChangedFile = {
-        path,
-        oldPath: statusEntry?.oldPath,
-        kind,
-        stage: stageByPath.get(path) ?? (kind === "untracked" ? "untracked" : "unstaged"),
         additions: stat?.additions ?? untrackedStat?.additions ?? 0,
-        deletions: stat?.deletions ?? 0,
         binary: stat?.binary ?? untrackedStat?.binary ?? false,
-        warnings: warningsFor(path, kind, stat?.additions ?? untrackedStat?.additions ?? 0, stat?.deletions ?? 0),
+        deletions: stat?.deletions ?? 0,
+        kind,
         mtimeMs: kind === "deleted" ? 0 : fileMtime(repoRoot, path),
+        oldPath: statusEntry?.oldPath,
+        path,
+        stage: stageByPath.get(path) ?? (kind === "untracked" ? "untracked" : "unstaged"),
+        warnings: warningsFor(path, kind, stat?.additions ?? untrackedStat?.additions ?? 0, stat?.deletions ?? 0),
       }
       return file
     })
@@ -167,12 +167,12 @@ export async function loadGitModel(repoRoot: string, scope: DiffScope): Promise<
   const repoFilesKey = `${trackedOutput}\x01${untrackedOutput}`
 
   return {
-    repoRoot,
-    scopeKey: `${scope.kind}:${scope.ref}`,
     changed,
     changedByPath: new Map(changed.map((file) => [file.path, file])),
     repoFiles: parseRepoFiles(trackedOutput, untrackedOutput, repoFilesKey),
     repoFilesKey,
+    repoRoot,
+    scopeKey: `${scope.kind}:${scope.ref}`,
   }
 }
 
@@ -181,7 +181,7 @@ export function loadFileDiff(repoRoot: string, scope: DiffScope, file: ChangedFi
     return runCommand(["git", "diff", "--no-index", "--", "/dev/null", file.path], repoRoot, [0, 1]).stdout
   }
 
-  // the old path must be in the pathspec or git cannot pair the rename and shows a whole-file add
+  // The old path must be in the pathspec or git cannot pair the rename and shows a whole-file add
   const pathspec = file.oldPath === undefined ? [file.path] : [file.oldPath, file.path]
   return runCommand([...diffArgs(scope), "--", ...pathspec], repoRoot, [0, 1]).stdout
 }
@@ -242,7 +242,7 @@ export function mergeModel(prev: GitModel, next: GitModel): GitModel {
     return prev
   }
 
-  // keep identity for untouched files so per-file memos (e.g. the selected diff) hold
+  // Keep identity for untouched files so per-file memos (e.g. the selected diff) hold
   const changed = next.changed.map((file) => {
     const before = prev.changedByPath.get(file.path)
     return before !== undefined && sameChangedFile(before, file) ? before : file
@@ -320,12 +320,12 @@ export function parseUntrackedFiles(output: string): StatusEntry[] {
   return output
     .split("\0")
     .filter((path) => path !== "")
-    .map((path) => ({ path, kind: "untracked" }))
+    .map((path) => ({ kind: "untracked", path }))
 }
 
 export function parseNumstat(output: string) {
   const tokens = output.split("\0")
-  const entries: Array<{ path: string; additions: number; deletions: number; binary: boolean }> = []
+  const entries: { path: string; additions: number; deletions: number; binary: boolean }[] = []
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]
@@ -335,7 +335,7 @@ export function parseNumstat(output: string) {
 
     const [addedRaw = "0", deletedRaw = "0", ...pathParts] = token.split("\t")
     let path = pathParts.join("\t")
-    // a rename record carries no inline path at all ("added\tdeleted\t" NUL old
+    // A rename record carries no inline path at all ("added\tdeleted\t" NUL old
     // NUL new), unlike a path that merely ends with a tab
     if (pathParts.length === 1 && pathParts[0] === "") {
       path = tokens[index + 2] ?? ""
@@ -344,10 +344,10 @@ export function parseNumstat(output: string) {
 
     const binary = addedRaw === "-" || deletedRaw === "-"
     entries.push({
-      path,
       additions: binary ? 0 : Number.parseInt(addedRaw, 10),
-      deletions: binary ? 0 : Number.parseInt(deletedRaw, 10),
       binary,
+      deletions: binary ? 0 : Number.parseInt(deletedRaw, 10),
+      path,
     })
   }
 
@@ -370,8 +370,8 @@ export function parseNameStatus(output: string): StatusEntry[] {
       const oldPath = tokens[index + 1] ?? ""
       const path = tokens[index + 2] ?? oldPath
       index += 2
-      // a copy leaves the source untouched, so only the destination is a change
-      entries.push(code === "R" ? { path, oldPath, kind: "renamed" } : { path, kind: "added" })
+      // A copy leaves the source untouched, so only the destination is a change
+      entries.push(code === "R" ? { kind: "renamed", oldPath, path } : { kind: "added", path })
       continue
     }
 
@@ -379,11 +379,11 @@ export function parseNameStatus(output: string): StatusEntry[] {
     index += 1
 
     if (code === "A") {
-      entries.push({ path, kind: "added" })
+      entries.push({ kind: "added", path })
     } else if (code === "D") {
-      entries.push({ path, kind: "deleted" })
+      entries.push({ kind: "deleted", path })
     } else {
-      entries.push({ path, kind: "modified" })
+      entries.push({ kind: "modified", path })
     }
   }
 
@@ -434,7 +434,7 @@ function warningsFor(path: string, kind: ChangeKind, additions: number, deletion
 }
 
 function statUntrackedFile(repoRoot: string, path: string) {
-  // loadFileContent absorbs dangling symlinks and files deleted mid-scan as "missing"
+  // LoadFileContent absorbs dangling symlinks and files deleted mid-scan as "missing"
   const content = loadFileContent(repoRoot, path, { full: false })
   if (content.kind === "text") {
     return { additions: content.lineCount, binary: false }

@@ -1,6 +1,6 @@
 import { runCommand } from "./process"
 
-export type CopyReferencePayload = {
+export interface CopyReferencePayload {
   path: string
   line?: number
   snippet?: string

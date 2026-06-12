@@ -1,6 +1,6 @@
 import type { ChangedFile, RepoFile, StageState } from "./git"
 
-export type FileNode = {
+export interface FileNode {
   type: "file"
   id: string
   name: string
@@ -9,7 +9,7 @@ export type FileNode = {
   changed: ChangedFile | undefined
 }
 
-export type DirectoryNode = {
+export interface DirectoryNode {
   type: "directory"
   id: string
   name: string
@@ -25,13 +25,13 @@ export type DirectoryNode = {
 
 export type FileTreeNode = DirectoryNode | FileNode
 
-export type FileTreeRow = {
+export interface FileTreeRow {
   node: FileTreeNode
   index: number
   depth: number
 }
 
-export type BuildTreeOptions = {
+export interface BuildTreeOptions {
   changesOnly: boolean
 }
 
@@ -40,7 +40,7 @@ export function buildFileTree(repoFiles: RepoFile[], changedByPath: Map<string, 
   const directories = new Map<string, DirectoryNode>([["", root]])
   const seen = new Set<string>()
 
-  const insert = (path: string, tracked: boolean) => {
+  function insert(path: string, tracked: boolean) {
     const changed = changedByPath.get(path)
     if (options.changesOnly && changed === undefined) {
       return
@@ -64,12 +64,12 @@ export function buildFileTree(repoFiles: RepoFile[], changedByPath: Map<string, 
     }
 
     parent.children.push({
-      type: "file",
+      changed,
       id: `file:${path}`,
       name: parts.at(-1) ?? path,
       path,
       tracked,
-      changed,
+      type: "file",
     })
   }
 
@@ -78,7 +78,7 @@ export function buildFileTree(repoFiles: RepoFile[], changedByPath: Map<string, 
     insert(file.path, file.tracked)
   }
 
-  // staged deletions vanish from ls-files; keep them visible via the changed set
+  // Staged deletions vanish from ls-files; keep them visible via the changed set
   for (const path of changedByPath.keys()) {
     if (!seen.has(path)) {
       insert(path, true)
@@ -113,8 +113,8 @@ export function expandAncestorsForPath(expanded: Set<string>, path: string) {
 export function flattenTree(nodes: FileTreeNode[], expanded: Set<string>) {
   const rows: FileTreeRow[] = []
 
-  const visit = (node: FileTreeNode, depth: number) => {
-    rows.push({ node, index: rows.length, depth })
+  function visit(node: FileTreeNode, depth: number) {
+    rows.push({ depth, index: rows.length, node })
 
     if (node.type === "directory" && expanded.has(node.id)) {
       for (const child of node.children) {
@@ -151,17 +151,17 @@ export function firstFileInNode(node: FileTreeNode): FileNode | undefined {
 
 function makeDirectory(name: string, path: string): DirectoryNode {
   return {
-    type: "directory",
+    additions: 0,
+    changedCount: 0,
+    children: [],
+    deletions: 0,
+    fileCount: 0,
     id: `dir:${path}`,
     name,
     path,
-    additions: 0,
-    deletions: 0,
-    fileCount: 0,
-    changedCount: 0,
     stage: undefined,
+    type: "directory",
     warnings: [],
-    children: [],
   }
 }
 
@@ -206,7 +206,7 @@ function aggregateDirectory(directory: DirectoryNode) {
   directory.fileCount = fileCount
   directory.changedCount = changedCount
   directory.stage = stages.size === 0 ? undefined : stages.size === 1 ? [...stages][0] : "mixed"
-  directory.warnings = Array.from(warnings)
+  directory.warnings = [...warnings]
 }
 
 function sortTree(directory: DirectoryNode) {

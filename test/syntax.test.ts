@@ -65,11 +65,11 @@ describe("capture coverage", () => {
     join(repoRoot, "node_modules/@opentui/core/assets/markdown_inline/highlights.scm"),
   ]
 
-  // meta captures that intentionally carry no style of their own
+  // Meta captures that intentionally carry no style of their own
   const metaCaptures = new Set(["spell", "nospell", "conceal", "none", "embedded", "cImport", "import", "_lang", ""])
 
-  // after expansion every capture a grammar emits must have an exact entry,
-  // because OpenTUI's fallback (first dotted segment) loses specificity
+  // After expansion every capture a grammar emits must have an exact entry,
+  // Because OpenTUI's fallback (first dotted segment) loses specificity
   test("every emitted capture resolves to an exact expanded style", () => {
     const sources = queryFiles.map((file) => readFileSync(file, "utf8"))
     const expanded = expandCaptureStyles(sources)

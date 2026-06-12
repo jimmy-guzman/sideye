@@ -11,8 +11,8 @@ describe("re-running checks", () => {
   test("r reports checks finished once diagnostics complete", async () => {
     const repoRoot = createFixtureRepo("sideye-recheck-", { "README.md": "# Fixture\n" })
     const model = await loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
-    const { renderer, renderOnce, captureCharFrame, mockInput } = await createTestRenderer({ width: 120, height: 34 })
-    const settleUntil = makeSettleUntil({ renderOnce, captureCharFrame })
+    const { renderer, renderOnce, captureCharFrame, mockInput } = await createTestRenderer({ height: 34, width: 120 })
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce })
 
     try {
       createRoot(renderer).render(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax: disabledSyntax }))
@@ -25,7 +25,7 @@ describe("re-running checks", () => {
       expect(after).not.toContain("running checks…")
     } finally {
       renderer.destroy()
-      rmSync(repoRoot, { recursive: true, force: true })
+      rmSync(repoRoot, { force: true, recursive: true })
     }
   }, 20_000)
 })

@@ -3,10 +3,11 @@ import { createTestRenderer } from "@opentui/core/testing"
 import { afterAll, describe, expect, test } from "bun:test"
 import { createSyntaxConfig, diffFiletypeFor } from "../src/syntax"
 
-const toDiff = (path: string, lines: string[]) =>
-  `--- a/${path}\n+++ b/${path}\n@@ -1,0 +1,${lines.length} @@\n${lines.map((line) => `+${line}`).join("\n")}\n`
+function toDiff(path: string, lines: string[]) {
+  return `--- a/${path}\n+++ b/${path}\n@@ -1,0 +1,${lines.length} @@\n${lines.map((line) => `+${line}`).join("\n")}\n`
+}
 
-const hex = (color: RGBA | undefined) => {
+function hex(color: RGBA | undefined) {
   if (color === undefined) {
     return "none"
   }
@@ -34,32 +35,32 @@ async function renderDiffSpans(path: string, lines: string[], sentinel: string, 
     throw new Error(`syntax config failed: ${syntax.status}`)
   }
 
-  const { renderer, renderOnce, captureSpans } = await createTestRenderer({ width: 100, height: 30 })
+  const { renderer, renderOnce, captureSpans } = await createTestRenderer({ height: 30, width: 100 })
   destroyers.push(() => renderer.destroy())
 
   const diff = new DiffRenderable(renderer, {
-    id: `syntax-render-${path}`,
-    width: "100%",
-    height: 28,
     diff: toDiff(path, lines),
-    view: "unified",
     filetype: diffFiletypeFor(path, syntax),
+    height: 28,
+    id: `syntax-render-${path}`,
+    showLineNumbers: false,
     syntaxStyle: syntax.style,
     treeSitterClient: syntax.treeSitterClient,
-    showLineNumbers: false,
+    view: "unified",
+    width: "100%",
     wrapMode: "none",
   })
   renderer.root.add(diff)
 
-  // highlighting streams in from the parser worker, so poll with renderOnce
-  // until the sentinel span reaches its highlighted color
+  // Highlighting streams in from the parser worker, so poll with renderOnce
+  // Until the sentinel span reaches its highlighted color
   let spans: { text: string; fg: string }[] = []
   for (let attempt = 0; attempt < 100; attempt += 1) {
     // oxlint-disable-next-line no-await-in-loop -- polling retry: render then wait for syntax highlight to stream in
     await renderOnce()
     // oxlint-disable-next-line no-await-in-loop -- polling retry: render then wait for syntax highlight to stream in
     await new Promise((resolve) => setTimeout(resolve, 50))
-    spans = captureSpans().lines.flatMap((line) => line.spans.map((span) => ({ text: span.text, fg: hex(span.fg) })))
+    spans = captureSpans().lines.flatMap((line) => line.spans.map((span) => ({ fg: hex(span.fg), text: span.text })))
     if (spans.some((span) => span.text.includes(sentinel) && span.fg === sentinelFg)) {
       break
     }
@@ -87,7 +88,7 @@ describe("syntax highlighting in diffs", () => {
   test("typescript diffs style keywords, types, strings, and template parts", async () => {
     const fgOf = await renderDiffSpans(
       "src/example.ts",
-      ['const greeting: string = "hi"', "export function shout(name: string) {", "  return `${greeting} ${name}`", "}"],
+      ['const greeting: string = "hi"', "export function shout(name: string) {", "  return `${greeting} ${name}`", "}"], // oxlint-disable-line no-template-curly-in-string
       "export",
       "#ff4fb8",
     )

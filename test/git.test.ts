@@ -18,17 +18,17 @@ import {
 import { createFixtureRepo, runGit } from "../test/helpers"
 
 function file(path: string, overrides: Partial<ChangedFile> = {}): ChangedFile {
-  return { path, kind: "modified", stage: "unstaged", additions: 1, deletions: 0, binary: false, warnings: [], mtimeMs: 0, ...overrides }
+  return { additions: 1, binary: false, deletions: 0, kind: "modified", mtimeMs: 0, path, stage: "unstaged", warnings: [], ...overrides }
 }
 
 function model(changed: ChangedFile[], repoFilesKey = "key", scopeKey = "all:HEAD"): GitModel {
   return {
-    repoRoot: "/repo",
-    scopeKey,
     changed,
     changedByPath: new Map(changed.map((entry) => [entry.path, entry])),
     repoFiles: changed.map((entry) => ({ path: entry.path, tracked: true })),
     repoFilesKey,
+    repoRoot: "/repo",
+    scopeKey,
   }
 }
 
@@ -54,8 +54,8 @@ describe("scope arguments", () => {
 describe("parseUntrackedFiles", () => {
   test("parses nul-delimited untracked files without directory placeholders", () => {
     expect(parseUntrackedFiles("src/App.tsx\0src/git.ts\0")).toEqual([
-      { path: "src/App.tsx", kind: "untracked" },
-      { path: "src/git.ts", kind: "untracked" },
+      { kind: "untracked", path: "src/App.tsx" },
+      { kind: "untracked", path: "src/git.ts" },
     ])
   })
 })
@@ -63,36 +63,36 @@ describe("parseUntrackedFiles", () => {
 describe("parseNumstat", () => {
   test("parses nul-delimited text and binary churn, keeping unicode paths literal", () => {
     expect(parseNumstat("10\t2\tsrc/café.ts\0-\t-\timage.png\0")).toEqual([
-      { path: "src/café.ts", additions: 10, deletions: 2, binary: false },
-      { path: "image.png", additions: 0, deletions: 0, binary: true },
+      { additions: 10, binary: false, deletions: 2, path: "src/café.ts" },
+      { additions: 0, binary: true, deletions: 0, path: "image.png" },
     ])
   })
 
   test("parses rename records whose paths follow as separate fields", () => {
-    expect(parseNumstat("1\t1\t\0src/old.ts\0src/new.ts\0")).toEqual([{ path: "src/new.ts", additions: 1, deletions: 1, binary: false }])
+    expect(parseNumstat("1\t1\t\0src/old.ts\0src/new.ts\0")).toEqual([{ additions: 1, binary: false, deletions: 1, path: "src/new.ts" }])
   })
 
   test("keeps paths that contain tabs intact", () => {
-    expect(parseNumstat("1\t0\tweird\tname.ts\0")).toEqual([{ path: "weird\tname.ts", additions: 1, deletions: 0, binary: false }])
+    expect(parseNumstat("1\t0\tweird\tname.ts\0")).toEqual([{ additions: 1, binary: false, deletions: 0, path: "weird\tname.ts" }])
   })
 
   test("does not mistake a path ending in a tab for a rename record", () => {
-    expect(parseNumstat("1\t0\ttrailing\t\0")).toEqual([{ path: "trailing\t", additions: 1, deletions: 0, binary: false }])
+    expect(parseNumstat("1\t0\ttrailing\t\0")).toEqual([{ additions: 1, binary: false, deletions: 0, path: "trailing\t" }])
   })
 })
 
 describe("parseNameStatus", () => {
   test("parses nul-delimited diff status", () => {
     expect(parseNameStatus("M\0src/a.ts\0A\0src/b.ts\0D\0src/c.ts\0R100\0src/d.ts\0src/e.ts\0")).toEqual([
-      { path: "src/a.ts", kind: "modified" },
-      { path: "src/b.ts", kind: "added" },
-      { path: "src/c.ts", kind: "deleted" },
-      { path: "src/e.ts", oldPath: "src/d.ts", kind: "renamed" },
+      { kind: "modified", path: "src/a.ts" },
+      { kind: "added", path: "src/b.ts" },
+      { kind: "deleted", path: "src/c.ts" },
+      { kind: "renamed", oldPath: "src/d.ts", path: "src/e.ts" },
     ])
   })
 
   test("treats a copy as an addition of the destination", () => {
-    expect(parseNameStatus("C075\0src/a.ts\0src/copy.ts\0")).toEqual([{ path: "src/copy.ts", kind: "added" }])
+    expect(parseNameStatus("C075\0src/a.ts\0src/copy.ts\0")).toEqual([{ kind: "added", path: "src/copy.ts" }])
   })
 })
 
@@ -119,9 +119,9 @@ describe("loadGitModel in a fixture repo", () => {
     try {
       symlinkSync("/nonexistent-target", join(repoRoot, "broken-link"))
       const loaded = await loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
-      expect(loaded.changedByPath.get("broken-link")).toMatchObject({ kind: "untracked", additions: 0 })
+      expect(loaded.changedByPath.get("broken-link")).toMatchObject({ additions: 0, kind: "untracked" })
     } finally {
-      rmSync(repoRoot, { recursive: true, force: true })
+      rmSync(repoRoot, { force: true, recursive: true })
     }
   })
 
@@ -131,7 +131,7 @@ describe("loadGitModel in a fixture repo", () => {
       writeFileSync(join(repoRoot, "src", "café.ts"), "const a = 2\n")
       const loaded = await loadGitModel(repoRoot, { kind: "all", ref: "HEAD" })
       const changed = loaded.changedByPath.get("src/café.ts")
-      expect(changed).toMatchObject({ kind: "modified", additions: 1, deletions: 1 })
+      expect(changed).toMatchObject({ additions: 1, deletions: 1, kind: "modified" })
       expect(loaded.changed).toHaveLength(1)
       if (changed === undefined) {
         throw new Error("unicode file missing from model")
@@ -140,7 +140,7 @@ describe("loadGitModel in a fixture repo", () => {
       const diff = loadFileDiff(loaded.repoRoot, { kind: "all", ref: "HEAD" }, changed)
       expect(diff).toContain("+const a = 2")
     } finally {
-      rmSync(repoRoot, { recursive: true, force: true })
+      rmSync(repoRoot, { force: true, recursive: true })
     }
   })
 
@@ -165,7 +165,7 @@ describe("loadGitModel in a fixture repo", () => {
       expect(diff).toContain("rename from src/old.ts")
       expect(addedLines).toEqual(["+const added = true"])
     } finally {
-      rmSync(repoRoot, { recursive: true, force: true })
+      rmSync(repoRoot, { force: true, recursive: true })
     }
   })
 })

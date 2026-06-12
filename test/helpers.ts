@@ -28,7 +28,7 @@ export function createFixtureRepo(prefix: string, files: Record<string, string>)
   return repoRoot
 }
 
-type FrameSource = {
+interface FrameSource {
   renderOnce: () => Promise<void>
   captureCharFrame: () => string
 }

@@ -9,8 +9,8 @@ import { disabledSyntax, makeSettleUntil } from "../test/helpers"
 describe("App rendering", () => {
   test("renders the repo tree, scope label, and status bar", async () => {
     const model = await loadGitModel(process.cwd(), { kind: "all", ref: "HEAD" })
-    const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({ width: 110, height: 32 })
-    const settleUntil = makeSettleUntil({ renderOnce, captureCharFrame })
+    const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({ height: 32, width: 110 })
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce })
 
     createRoot(renderer).render(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax: disabledSyntax }))
     const frame = await settleUntil("app chrome", (current) => current.includes("sideye"))

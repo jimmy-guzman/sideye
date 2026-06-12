@@ -1,11 +1,11 @@
 export type ScopeKind = "all" | "staged" | "unstaged"
 
-export type DiffScope = {
+export interface DiffScope {
   kind: ScopeKind
   ref: string
 }
 
-export type CliOptions = {
+export interface CliOptions {
   scope: DiffScope
   help: boolean
   version: boolean
@@ -51,8 +51,8 @@ export function parseArgs(args: string[]): CliOptions {
 
   return {
     help,
-    version,
     scope: { kind, ref: ref ?? "HEAD" },
+    version,
   }
 }
 

@@ -3,12 +3,29 @@
   "plugins": ["typescript", "unicorn", "oxc", "react", "react-perf"],
   "categories": {
     "correctness": "error",
-    "suspicious": "warn",
-    "perf": "warn"
+    "suspicious": "error",
+    "perf": "error",
+    "style": "error"
   },
   "rules": {
     "eqeqeq": "error",
-    "react/react-in-jsx-scope": "off"
+    "react/react-in-jsx-scope": "off",
+    "unicorn/no-null": "off",
+    "unicorn/filename-case": "off",
+    "unicorn/no-nested-ternary": "off",
+    "react/jsx-max-depth": "off",
+    "sort-imports": "off",
+    "no-ternary": "off",
+    "no-nested-ternary": "off",
+    "no-magic-numbers": "off",
+    "no-duplicate-imports": "off",
+    "max-statements": "off",
+    "no-continue": "off",
+    "max-params": "off",
+    "id-length": "off",
+    "func-style": ["error", "declaration"],
+    "prefer-destructuring": "off",
+    "init-declarations": "off"
   },
   "ignorePatterns": ["dist", ".agents"],
   "env": {

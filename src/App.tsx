@@ -35,17 +35,24 @@ import {
   type FileTreeRow,
 } from "./tree"
 
-type AppProps = {
+interface AppProps {
   model: GitModel
   scope: DiffScope
   syntax: SyntaxConfig
 }
 
-type ScrollablePane = { scrollY: number; maxScrollY: number }
+interface ScrollablePane {
+  scrollY: number
+  maxScrollY: number
+}
 
-// escalate lets a jump switch into file view to find its exact line; without
-// it a miss lands on the nearest line in the current view
-type JumpTarget = { path: string; line: number; escalate: boolean }
+// Escalate lets a jump switch into file view to find its exact line; without
+// It a miss lands on the nearest line in the current view
+interface JumpTarget {
+  path: string
+  line: number
+  escalate: boolean
+}
 
 const DIFF_ID = "sideye-diff"
 const PROBLEMS_HEIGHT = 10
@@ -118,26 +125,26 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     [checkerState],
   )
   const allProblemItems = useMemo(() => {
-    const items: Array<
+    const items: (
       | { kind: "failure"; id: string; checker: CheckerName; line: string; isFirst: boolean }
       | { kind: "problem"; id: string; problem: Diagnostic }
-    > = []
+    )[] = []
     checkerFailures.forEach(({ checker, message }, fi) => {
       message
         .split("\n")
         .filter((l) => l.trim() !== "")
         .forEach((line, li) => {
-          items.push({ kind: "failure", id: `failure-${fi}-${li}`, checker, line, isFirst: li === 0 })
+          items.push({ checker, id: `failure-${fi}-${li}`, isFirst: li === 0, kind: "failure", line })
         })
     })
     problems.forEach((problem, index) => {
-      items.push({ kind: "problem", id: `problem-${index}`, problem })
+      items.push({ id: `problem-${index}`, kind: "problem", problem })
     })
     return items
   }, [checkerFailures, problems])
   const recencyByPath = useMemo(() => lastChangedAt(activityLog), [activityLog])
   const changedPathSet = useMemo(() => new Set(model.changedByPath.keys()), [model.changedByPath])
-  // hoisted out of paletteResults so a keystroke only pays for ranking
+  // Hoisted out of paletteResults so a keystroke only pays for ranking
   const allPaths = useMemo(
     () => [...new Set([...model.repoFiles.map((file) => file.path), ...model.changedByPath.keys()])],
     [model.changedByPath, model.repoFiles],
@@ -147,7 +154,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       return []
     }
 
-    return rankFiles(paletteQuery, allPaths, { lastChangedAt: recencyByPath, changed: changedPathSet, limit: 50 })
+    return rankFiles(paletteQuery, allPaths, { changed: changedPathSet, lastChangedAt: recencyByPath, limit: 50 })
   }, [allPaths, changedPathSet, paletteOpen, paletteQuery, recencyByPath])
   const lineMap = useMemo(
     () => (selectedPath === undefined ? new Map<number, Diagnostic[]>() : findingsLineMap(selectedPath, checkerState)),
@@ -162,7 +169,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     const gitSpec =
       selectedFile?.kind === "deleted" ? (scope.kind === "unstaged" ? `:${selectedPath}` : `${scope.ref}:${selectedPath}`) : undefined
     return loadFileContent(model.repoRoot, selectedPath, { full: fullContentPaths.has(selectedPath), gitSpec })
-    // model identity changes whenever git state changes, keeping live content fresh
+    // Model identity changes whenever git state changes, keeping live content fresh
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showFileContent, selectedPath, selectedFile, scope, model, fullContentPaths])
 
@@ -186,7 +193,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       }),
     [fullContentPaths, selectedDiff, selectedPath, showFileContent],
   )
-  // clamp navigation to the lines renderPatch actually emitted, not the full parse
+  // Clamp navigation to the lines renderPatch actually emitted, not the full parse
   const navigableLines = useMemo(
     () => renderedPatch.parsed.hunks.flatMap((hunk) => hunk.lines).slice(0, renderedPatch.bodyLineCount),
     [renderedPatch],
@@ -207,7 +214,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       model.repoRoot,
       model.changed,
       (checker, nextState) => {
-        // a newer run owns the state; drop results arriving from a stale run
+        // A newer run owns the state; drop results arriving from a stale run
         if (generation !== runGenerationRef.current) {
           return
         }
@@ -215,7 +222,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
         setCheckerState((current) => ({ ...current, [checker]: nextState }))
         for (const fileState of nextState.values()) {
           if (fileState.status === "failed") {
-            // a failed run stamps every file with the same run-level message
+            // A failed run stamps every file with the same run-level message
             failures.push(`${checker} failed: ${fileState.message?.split("\n")[0] ?? ""}`)
             break
           }
@@ -224,8 +231,8 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       controller.signal,
     ).finally(() => {
       setChecksInFlight((count) => Math.max(0, count - 1))
-      // the run reports its own completion: every trigger path (mount, the r
-      // key, the quiet-period rerun) gets a status, and only the latest run speaks
+      // The run reports its own completion: every trigger path (mount, the r
+      // Key, the quiet-period rerun) gets a status, and only the latest run speaks
       if (generation === runGenerationRef.current) {
         setStatus(failures[0] ?? "checks finished")
       }
@@ -247,8 +254,10 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     let fastInFlight = false
     let slowInFlight = false
 
-    const loadFast = async () => {
-      if (fastInFlight) return
+    async function loadFast() {
+      if (fastInFlight) {
+        return
+      }
       fastInFlight = true
       try {
         const next = await loadChangedFiles(initialModel.repoRoot, scope)
@@ -256,14 +265,16 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
           setModel((previous) => mergeChanged(previous, next))
         }
       } catch {
-        // transient git failures (e.g. an agent holding index.lock) resolve on the next poll
+        // Transient git failures (e.g. an agent holding index.lock) resolve on the next poll
       } finally {
         fastInFlight = false
       }
     }
 
-    const loadSlow = async () => {
-      if (slowInFlight) return
+    async function loadSlow() {
+      if (slowInFlight) {
+        return
+      }
       slowInFlight = true
       try {
         const next = await loadRepoFiles(initialModel.repoRoot)
@@ -275,7 +286,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
           )
         }
       } catch {
-        // ignore transient errors
+        // Ignore transient errors
       } finally {
         slowInFlight = false
       }
@@ -286,20 +297,22 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
 
     // Adaptive fast poll: 750ms when active, 2000ms after 10s of quiet.
     let fastId: ReturnType<typeof setTimeout>
-    const scheduleFast = () => {
+    function scheduleFast() {
       const quiet = Date.now() - lastChangeRef.current > 10_000
       fastId = setTimeout(
         () => {
           void loadFast()
-          scheduleFast()
+          if (!cancelled) {
+            scheduleFast()
+          }
         },
-        quiet ? 2_000 : 750,
+        quiet ? 2000 : 750,
       )
     }
     scheduleFast()
 
     // Separate long interval just for the expensive tracked-files list.
-    const slowId = setInterval(() => void loadSlow(), 5_000)
+    const slowId = setInterval(() => void loadSlow(), 5000)
 
     return () => {
       cancelled = true
@@ -314,27 +327,27 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     previousChangedRef.current = model.changed
     previousScopeKeyRef.current = model.scopeKey
 
-    // a scope switch swaps the changed set wholesale; that is not agent
-    // activity, but the new set still needs checker state, so re-run checks
+    // A scope switch swaps the changed set wholesale; that is not agent
+    // Activity, but the new set still needs checker state, so re-run checks
     if (previousScopeKey !== model.scopeKey) {
       runChecksRef.current()
       return
     }
 
-    const entries: Array<{ path: string; kind: "changed" | "appeared" | "removed" }> = []
+    const entries: { path: string; kind: "changed" | "appeared" | "removed" }[] = []
 
     for (const file of model.changed) {
       const before = previousByPath.get(file.path)
       if (before === undefined) {
-        entries.push({ path: file.path, kind: "appeared" })
+        entries.push({ kind: "appeared", path: file.path })
       } else if (before.additions !== file.additions || before.deletions !== file.deletions) {
-        entries.push({ path: file.path, kind: "changed" })
+        entries.push({ kind: "changed", path: file.path })
       }
       previousByPath.delete(file.path)
     }
 
     for (const path of previousByPath.keys()) {
-      entries.push({ path, kind: "removed" })
+      entries.push({ kind: "removed", path })
     }
 
     if (entries.length > 0) {
@@ -355,8 +368,8 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       return
     }
 
-    // checks re-run once the repo has been quiet for 2s
-    const id = setTimeout(() => runChecksRef.current(), 2_000)
+    // Checks re-run once the repo has been quiet for 2s
+    const id = setTimeout(() => runChecksRef.current(), 2000)
     return () => clearTimeout(id)
   }, [activityLog])
 
@@ -366,7 +379,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       return
     }
 
-    const id = setTimeout(() => setNow(Date.now()), 1_000)
+    const id = setTimeout(() => setNow(Date.now()), 1000)
     return () => clearTimeout(id)
   }, [activityLog, now])
 
@@ -403,7 +416,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   useEffect(() => {
     const firstChanged = navigableLines.findIndex((line) => line.type !== "context")
     setCursorIndex(firstChanged === -1 ? 0 : firstChanged)
-    // reset to the first change only when the file changes, not on live edits of the same file
+    // Reset to the first change only when the file changes, not on live edits of the same file
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPath])
 
@@ -413,13 +426,13 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     }
 
     const index = navigableLines.findIndex((line) => line.newLine === jumpTarget.line)
-    if (index >= 0) {
+    if (index !== -1) {
       setCursorIndex(index)
       setJumpTarget(undefined)
       return
     }
 
-    // the line may simply not be rendered yet; un-truncate the current view first
+    // The line may simply not be rendered yet; un-truncate the current view first
     if (truncated && !fullContentPaths.has(jumpTarget.path)) {
       setFullContentPaths((current) => new Set(current).add(jumpTarget.path))
       return
@@ -430,7 +443,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       return
     }
 
-    // land on the nearest line instead of bouncing between views
+    // Land on the nearest line instead of bouncing between views
     const nearest = nearestNavigableIndex(navigableLines, jumpTarget.line)
     if (nearest >= 0) {
       setCursorIndex(nearest)
@@ -440,11 +453,11 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
 
   const problemsHeight = problemsOpen ? PROBLEMS_HEIGHT : 0
   const paneHeight = Math.max(1, height - 4 - problemsHeight)
-  // the viewer pane spends one extra row on its path header
+  // The viewer pane spends one extra row on its path header
   const viewerHeight = Math.max(1, paneHeight - 1)
 
-  // the add/remove/diagnostic tints only change with the content, so a cursor
-  // move just copies this map and overlays the cursor row
+  // The add/remove/diagnostic tints only change with the content, so a cursor
+  // Move just copies this map and overlays the cursor row
   const baseLineColors = useMemo(() => {
     const colors = new Map<number, LineColorConfig>()
     navigableLines.forEach((line, index) => {
@@ -462,7 +475,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       }
 
       if (gutter !== TRANSPARENT || content !== TRANSPARENT) {
-        colors.set(index, { gutter, content })
+        colors.set(index, { content, gutter })
       }
     })
     return colors
@@ -480,14 +493,15 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       return
     }
 
+    // oxlint-disable-next-line func-style
     const paint = () => {
       const colors = new Map<number, string | RGBA | LineColorConfig>(baseLineColors)
-      colors.set(cursorIndex, { gutter: CURSOR_BG, content: CURSOR_BG })
+      colors.set(cursorIndex, { content: CURSOR_BG, gutter: CURSOR_BG })
       diff.setLineColors(colors)
     }
 
-    // the diff renderable repaints its own line colors when content settles;
-    // painting again in a microtask keeps the cursor/diagnostic tints on top
+    // The diff renderable repaints its own line colors when content settles;
+    // Painting again in a microtask keeps the cursor/diagnostic tints on top
     paint()
     queueMicrotask(paint)
 
@@ -512,7 +526,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       } else if (key.name === "up" || (key.ctrl && key.name === "p")) {
         setPaletteIndex((current) => Math.max(current - 1, 0))
       }
-      // every other key belongs to the palette input
+      // Every other key belongs to the palette input
       return
     }
 
@@ -580,7 +594,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       const line = navigableLines[cursorIndex]
       const lineNumber = line?.newLine ?? line?.oldLine
       if (lineNumber !== undefined) {
-        setJumpTarget({ path: selectedPath, line: lineNumber, escalate: false })
+        setJumpTarget({ escalate: false, line: lineNumber, path: selectedPath })
       }
       setFileView((current) => !current)
       return
@@ -629,7 +643,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
           const { problem } = item
           selectFile(problem.path)
           if (problem.line !== undefined) {
-            setJumpTarget({ path: problem.path, line: problem.line, escalate: true })
+            setJumpTarget({ escalate: true, line: problem.line, path: problem.path })
           }
           setFocusedPane("diff")
         }
@@ -912,8 +926,8 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
               paletteResults.map((path, index) => {
                 const changed = model.changedByPath.get(path)
                 const recency = recencyLevel(recencyByPath.get(path), now)
-                // key and id both by index: reordering results must never
-                // change a live renderable's id or the scrollbox loses rows
+                // Key and id both by index: reordering results must never
+                // Change a live renderable's id or the scrollbox loses rows
                 // oxlint-disable react/no-array-index-key -- intentional: stable id-by-index required by scrollbox
                 return (
                   <box
@@ -945,7 +959,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   )
 }
 
-type TreeRowProps = {
+interface TreeRowProps {
   row: FileTreeRow
   focused: boolean
   selectedPath: string | undefined
@@ -955,8 +969,8 @@ type TreeRowProps = {
   now: number
 }
 
-// memoized so cursor moves and status updates do not re-render every row
-const TreeRow = memo(function TreeRow({ row, focused, selectedPath, expandedDirectories, checkerState, recencyByPath, now }: TreeRowProps) {
+// Memoized so cursor moves and status updates do not re-render every row
+const TreeRow = memo(({ row, focused, selectedPath, expandedDirectories, checkerState, recencyByPath, now }: TreeRowProps) => {
   const node = row.node
   const indent = " ".repeat(Math.max(0, row.depth) * 2)
   const background = focused ? CURSOR_BG_HEX : "#09090b"
