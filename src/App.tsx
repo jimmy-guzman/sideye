@@ -1,3 +1,4 @@
+import packageJson from "../package.json"
 import { RGBA, type DiffRenderable, type LineColorConfig, type ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -776,7 +777,10 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   return (
     <box width="100%" height="100%" flexDirection="column" backgroundColor="#09090b">
       <box height={1} flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1} backgroundColor="#111113">
-        <text fg="#ff4fb8">sideye</text>
+        <box flexDirection="row">
+          <text fg="#ff4fb8">sideye</text>
+          <text fg="#52525b">@{packageJson.version}</text>
+        </box>
         <text fg="#a1a1aa">
           {scopeLabel(scope)} · {model.changed.length} changed{countsText === "" ? "" : ` · ${countsText}`}
         </text>
