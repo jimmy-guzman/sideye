@@ -25,8 +25,8 @@ problems. You decide what to say next.
 - Opens unchanged files read-only, with syntax highlighting.
 - Opens changed files as diffs, with a toggle for the full file.
 - Switches between all changes, staged changes, and unstaged changes.
-- Switches between git worktrees in place, re-pointing the tree, diffs, and
-  checks at the chosen worktree.
+- Switches between git worktrees in place, re-pointing the tree, diffs,
+  polling, and checks at the chosen worktree.
 - Polls git while the agent works, then keeps the current file and selection
   stable as the view refreshes.
 - Marks recent activity and lets you jump to the latest touched file.

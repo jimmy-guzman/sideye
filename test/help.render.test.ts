@@ -24,9 +24,22 @@ describe("help overlay", () => {
       expect(help).toContain("go to file: fuzzy-search the whole repo")
       expect(help).toContain("toggle the file tree sidebar")
 
+      // P and b must be swallowed: no problems panel, no sidebar toggle, overlay stays
+      mockInput.pressKey("p")
+      mockInput.pressKey("b")
+      const afterSwallowed = await settleUntil("overlay still open", (frame) => frame.includes("switch to another git worktree"), 3)
+      expect(afterSwallowed).not.toContain("no problems")
+
+      mockInput.pressEscape()
+      const closedByEscape = await settleUntil("help closed by escape", (frame) => !frame.includes("switch to another git worktree"))
+      expect(closedByEscape).toContain("? keys · q quit")
+      expect(closedByEscape).not.toContain("no problems")
+
       // Q must close the overlay, not quit the app
+      mockInput.pressKey("?")
+      await settleUntil("help overlay again", (frame) => frame.includes("switch to another git worktree"))
       mockInput.pressKey("q")
-      const closed = await settleUntil("help closed", (frame) => !frame.includes("switch to another git worktree"))
+      const closed = await settleUntil("help closed by q", (frame) => !frame.includes("switch to another git worktree"))
       expect(closed).toContain("sideye")
       expect(closed).toContain("? keys · q quit")
     } finally {

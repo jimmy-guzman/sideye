@@ -106,6 +106,9 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const problemsRef = useRef<ScrollBoxRenderable>(null)
   const paletteRef = useRef<ScrollBoxRenderable>(null)
   const worktreeRef = useRef<ScrollBoxRenderable>(null)
+  // Bumped on every picker open/close so a slow listWorktrees from an earlier
+  // Open cannot repopulate or close a newer picker
+  const worktreeRequestRef = useRef(0)
   const diffRef = useRef<DiffRenderable>(null)
   const previousChangedRef = useRef<ChangedFile[]>(initialModel.changed)
   const previousScopeKeyRef = useRef(initialModel.scopeKey)
@@ -546,6 +549,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     if (worktreeOpen) {
       const lastIndex = Math.max(0, (worktrees?.length ?? 1) - 1)
       if (key.name === "escape" || key.name === "w") {
+        worktreeRequestRef.current += 1
         setWorktreeOpen(false)
       } else if (key.name === "j" || key.name === "down") {
         setWorktreeIndex((current) => Math.min(current + 1, lastIndex))
@@ -624,11 +628,16 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     }
 
     if (key.name === "w") {
+      const request = worktreeRequestRef.current + 1
+      worktreeRequestRef.current = request
       setWorktreeOpen(true)
       setWorktreeIndex(0)
       setWorktrees(undefined)
       void listWorktrees(model.repoRoot)
         .then((list) => {
+          if (worktreeRequestRef.current !== request) {
+            return
+          }
           // Bare entries have no files to review
           const selectable = list.filter((worktree) => !worktree.bare)
           setWorktrees(selectable)
@@ -640,6 +649,9 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
           )
         })
         .catch((error: unknown) => {
+          if (worktreeRequestRef.current !== request) {
+            return
+          }
           setWorktreeOpen(false)
           setStatus(error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error))
         })
@@ -804,6 +816,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   }
 
   async function switchWorktree(worktree: Worktree) {
+    worktreeRequestRef.current += 1
     setWorktreeOpen(false)
     if (worktree.path === model.repoRoot) {
       return
