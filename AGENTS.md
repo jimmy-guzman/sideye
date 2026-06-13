@@ -39,9 +39,11 @@ See `README.md` for what sideye does, its keys, and its non-goals; see `SPEC.md`
 State and async work use Effect v4 (beta). `effect` and `@effect/atom-react` are pinned to exact, matching beta versions and move together; `effect/unstable/*` can break on minor bumps.
 
 - Wrap existing pure functions in services; do not rewrite the pure logic, so its tests stay intact.
-- Define services with `Context.Service` plus a `Layer` (there is no `Effect.Service` in v4); define errors with `Data.TaggedError`, one tag per distinct failure.
+- Define services with `Context.Service` plus a `Layer` (there is no `Effect.Service` in v4); define errors with `Data.TaggedError`, one tag per distinct failure. Domain IO lives in `src/services/`; effect-backed atoms run through the shared `runtime` in `src/atoms/runtime.ts`.
 - Prefer the data-last pipe form for combinators (`x.pipe(Effect.flatMap(f))`) over the data-first form (`Effect.flatMap(x, f)`); the two-argument data-first form trips `unicorn/no-array-method-this-argument`.
-- UI, derived, and selection state live in atoms (`effect/unstable/reactivity`), read in components via `@effect/atom-react` hooks.
+- All app state lives in atoms under `src/atoms/` (writable, derived, and effect-backed); `App` holds no `useState` or `useMemo`, it reads atoms and owns only effects and refs. Components read atoms via `@effect/atom-react` hooks. Atoms initialized from props or startup are seeded with `useAtomInitialValues` in `App`.
+- The keymap dispatches through the atom registry: `createKeyHandler(registry, ctx)` reads and writes atoms via `registry.get`/`registry.set` (call them as methods, never destructured, to keep `this`), so a keypress sees the latest state, not a render-time snapshot. The `ctx` carries only non-atom dependencies.
+- Long-running effect work (the git poll, the diagnostics run) uses fiber interruption for cancellation: a `runtime.fn` atom's latest call interrupts the prior fiber. Do not reintroduce manual `AbortController` or generation-counter bookkeeping.
 
 ## Code design
 
