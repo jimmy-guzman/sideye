@@ -36,15 +36,26 @@ export const ProcessLive = Layer.succeed(Process)({
   // Manual AbortController bookkeeping.
   run: (command, cwd, options) =>
     Effect.acquireUseRelease(
-      Effect.sync(() =>
-        Bun.spawn({
-          cmd: [...command],
-          cwd,
-          stderr: "pipe",
-          stdout: "pipe",
-          ...(options?.stdin === undefined ? {} : { stdin: new Blob([options.stdin]) }),
-        }),
-      ),
+      // Bun.spawn throws synchronously when the executable is missing; Effect.try
+      // Maps that into the typed CommandError channel instead of an escaping defect.
+      Effect.try({
+        catch: (cause) =>
+          new CommandError({
+            command,
+            exitCode: -1,
+            message: cause instanceof Error ? cause.message : String(cause),
+            stderr: "",
+            stdout: "",
+          }),
+        try: () =>
+          Bun.spawn({
+            cmd: [...command],
+            cwd,
+            stderr: "pipe",
+            stdout: "pipe",
+            ...(options?.stdin === undefined ? {} : { stdin: new Blob([options.stdin]) }),
+          }),
+      }),
       (child) =>
         Effect.tryPromise({
           catch: (cause) =>

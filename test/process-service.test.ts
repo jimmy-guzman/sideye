@@ -27,6 +27,20 @@ test("Process.run fails with CommandError on a disallowed exit code", async () =
   expect(error.exitCode).not.toBe(0)
 })
 
+test("Process.run fails with CommandError when the executable is missing", async () => {
+  // Bun.spawn throws synchronously here; Effect.flip only resolves if that
+  // Surfaces as a typed failure rather than an escaping defect.
+  const error = await Effect.runPromise(
+    Process.pipe(
+      Effect.flatMap((process) => process.run(["sideye-no-such-binary"], import.meta.dir)),
+      Effect.flip,
+      Effect.provide(ProcessLive),
+    ),
+  )
+
+  expect(error).toBeInstanceOf(CommandError)
+})
+
 test("Process.run kills the child when the fiber is interrupted", async () => {
   const start = Date.now()
   const fiber = Effect.runFork(

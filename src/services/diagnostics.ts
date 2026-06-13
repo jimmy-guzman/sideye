@@ -1,3 +1,4 @@
+import { availableParallelism } from "node:os"
 import { isAbsolute, join } from "node:path"
 import { Context, Effect, Layer, Stream } from "effect"
 import {
@@ -71,9 +72,12 @@ export const DiagnosticsLive = Layer.effect(
       }
 
       const runnable = commands.filter((command): command is CheckerCommand & { command: string[] } => command.command !== undefined)
+      // A workspace typecheck fans out one process per affected package; cap the
+      // Spawn rate at the core count so a large monorepo cannot launch dozens of
+      // Heavy tsc/bun processes at once.
       return Effect.all(
         runnable.map((command) => runCommand(repoRoot, command)),
-        { concurrency: "unbounded" },
+        { concurrency: availableParallelism() },
       ).pipe(
         Effect.map((results): CheckerUpdate => {
           const allDiagnostics = results.flatMap((result) => (result.kind === "ok" ? result.diagnostics : []))
