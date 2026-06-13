@@ -1,20 +1,12 @@
 import { existsSync } from "node:fs"
 import packageJson from "../package.json"
-import { useAtomInitialValues, useAtomSet, useAtomValue } from "@effect/atom-react"
+import { RegistryContext, useAtomInitialValues, useAtomSet, useAtomValue } from "@effect/atom-react"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react"
-import { useCallback, useEffect, useRef } from "react"
+import { useCallback, useContext, useEffect, useRef } from "react"
 import { emptyActivityLog, latestActivity, recordActivity, RECENT_MS } from "./activity"
 import { activityLogAtom, nowAtom, recencyByPathAtom } from "./atoms/activity"
-import {
-  allProblemItemsAtom,
-  checkerStateAtom,
-  countsAtom,
-  lineMapAtom,
-  problemsAtom,
-  runChecksAtom,
-  statusAtom,
-} from "./atoms/diagnostics"
+import { allProblemItemsAtom, checkerStateAtom, countsAtom, lineMapAtom, runChecksAtom, statusAtom } from "./atoms/diagnostics"
 import { gitModelAtom } from "./atoms/git"
 import { paletteResultsAtom } from "./atoms/palette"
 import { focusedRowIndexAtom, treeRowsAtom } from "./atoms/tree"
@@ -27,7 +19,6 @@ import {
   truncatedAtom,
 } from "./atoms/viewer"
 import {
-  changesOnlyAtom,
   expandedDirectoriesAtom,
   fileViewAtom,
   focusedNodeIdAtom,
@@ -75,6 +66,7 @@ interface AppProps {
 export function App({ model: initialModel, scope: initialScope, syntax }: AppProps) {
   const renderer = useRenderer()
   const theme = useTheme()
+  const registry = useContext(RegistryContext)
   const { width, height } = useTerminalDimensions()
 
   const initialSelectedPath = initialModel.changed[0]?.path ?? initialModel.repoFiles[0]?.path
@@ -91,17 +83,14 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   ])
 
   const scope = useAtomValue(scopeAtom)
-  const setScope = useAtomSet(scopeAtom)
   const setGitModel = useAtomSet(gitModelAtom)
   const model = useAtomValue(gitModelAtom)
   const previousChangedRef = useRef<ChangedFile[]>(initialModel.changed)
   const previousScopeKeyRef = useRef(initialModel.scopeKey)
   const lastChangeRef = useRef(Date.now())
-  const setChangesOnly = useAtomSet(changesOnlyAtom)
   const selectedPath = useAtomValue(selectedPathAtom)
   const setSelectedPath = useAtomSet(selectedPathAtom)
   const focusedRowIndex = useAtomValue(focusedRowIndexAtom)
-  const setFocusedRowIndex = useAtomSet(focusedRowIndexAtom)
   const setFocusedNodeId = useAtomSet(focusedNodeIdAtom)
   const expandedDirectories = useAtomValue(expandedDirectoriesAtom)
   const setExpandedDirectories = useAtomSet(expandedDirectoriesAtom)
@@ -112,9 +101,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const focusedPane = useAtomValue(focusedPaneAtom)
   const setFocusedPane = useAtomSet(focusedPaneAtom)
   const problemsOpen = useAtomValue(problemsOpenAtom)
-  const setProblemsOpen = useAtomSet(problemsOpenAtom)
   const sidebarOpen = useAtomValue(sidebarOpenAtom)
-  const setSidebarOpen = useAtomSet(sidebarOpenAtom)
   const problemIndex = useAtomValue(problemIndexAtom)
   const setProblemIndex = useAtomSet(problemIndexAtom)
   const paletteOpen = useAtomValue(paletteOpenAtom)
@@ -125,11 +112,8 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const worktreeOpen = useAtomValue(worktreeOpenAtom)
   const setWorktreeOpen = useAtomSet(worktreeOpenAtom)
   const worktreeIndex = useAtomValue(worktreeIndexAtom)
-  const setWorktreeIndex = useAtomSet(worktreeIndexAtom)
   const worktrees = useAtomValue(worktreesAtom)
-  const setWorktrees = useAtomSet(worktreesAtom)
   const helpOpen = useAtomValue(helpOpenAtom)
-  const setHelpOpen = useAtomSet(helpOpenAtom)
   const activityLog = useAtomValue(activityLogAtom)
   const setActivityLog = useAtomSet(activityLogAtom)
   const now = useAtomValue(nowAtom)
@@ -140,7 +124,6 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const setStatus = useAtomSet(statusAtom)
   const runChecks = useAtomSet(runChecksAtom)
   const checksRunning = useAtomValue(runChecksAtom).waiting
-  const problems = useAtomValue(problemsAtom)
   const counts = useAtomValue(countsAtom)
   const allProblemItems = useAtomValue(allProblemItemsAtom)
   const sidebarRef = useRef<ScrollBoxRenderable>(null)
@@ -325,7 +308,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   // The viewer pane spends one extra row on its path header
   const viewerHeight = Math.max(1, paneHeight - 1)
 
-  const { cursorIndex, diffRef, setCursorIndex, setJumpTarget } = useDiffCursor({
+  const { cursorIndex, diffRef, setJumpTarget } = useDiffCursor({
     fileView,
     fullContentPaths,
     lineMap,
@@ -348,55 +331,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     [setSelectedPath, setFocusedNodeId, setFileView, setExpandedDirectories],
   )
 
-  useKeyboard(
-    createKeyHandler({
-      activityLog,
-      allProblemItems,
-      cursorIndex,
-      focusedPane,
-      focusedRowIndex,
-      helpOpen,
-      model,
-      navigableLines,
-      paletteOpen,
-      paletteResults,
-      problemIndex,
-      problems,
-      problemsOpen,
-      quit,
-      runChecks,
-      selectFile,
-      selectedFile,
-      selectedPath,
-      setChangesOnly,
-      setCursorIndex,
-      setExpandedDirectories,
-      setFileView,
-      setFocusedPane,
-      setFocusedRowIndex,
-      setFullContentPaths,
-      setHelpOpen,
-      setJumpTarget,
-      setPaletteIndex,
-      setPaletteOpen,
-      setPaletteQuery,
-      setProblemIndex,
-      setProblemsOpen,
-      setScope,
-      setSidebarOpen,
-      setStatus,
-      setWorktreeIndex,
-      setWorktreeOpen,
-      setWorktrees,
-      switchWorktree,
-      treeRows,
-      viewerHeight,
-      worktreeIndex,
-      worktreeOpen,
-      worktreeRequestRef,
-      worktrees,
-    }),
-  )
+  useKeyboard(createKeyHandler(registry, { quit, selectFile, switchWorktree, viewerHeight, worktreeRequestRef }))
 
   function quit() {
     renderer.destroy()
