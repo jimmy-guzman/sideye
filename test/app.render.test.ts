@@ -4,7 +4,7 @@ import { createRoot } from "@opentui/react"
 import { createElement } from "react"
 import { App } from "../src/App"
 import { loadGitModel } from "../src/git"
-import { disabledSyntax, makeSettleUntil } from "../test/helpers"
+import { disabledSyntax, makeSettleUntil, withRegistry } from "../test/helpers"
 
 describe("App rendering", () => {
   test("renders the repo tree, scope label, and status bar", async () => {
@@ -12,7 +12,7 @@ describe("App rendering", () => {
     const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({ height: 32, width: 110 })
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce })
 
-    createRoot(renderer).render(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax: disabledSyntax }))
+    createRoot(renderer).render(withRegistry(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax: disabledSyntax })))
     const frame = await settleUntil("app chrome", (current) => current.includes("sideye"))
 
     expect(frame).toContain("sideye")

@@ -6,7 +6,7 @@ import { createRoot } from "@opentui/react"
 import { createElement } from "react"
 import { App } from "../src/App"
 import { loadGitModel } from "../src/git"
-import { createFixtureRepo, disabledSyntax, makeSettleUntil } from "../test/helpers"
+import { createFixtureRepo, disabledSyntax, makeSettleUntil, withRegistry } from "../test/helpers"
 
 describe("scope switching", () => {
   test("re-runs checks for the new scope's changed set", async () => {
@@ -22,7 +22,7 @@ describe("scope switching", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce })
 
     try {
-      createRoot(renderer).render(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax: disabledSyntax }))
+      createRoot(renderer).render(withRegistry(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax: disabledSyntax })))
       const failed = await settleUntil("failed lint run", (frame) => frame.includes("lint failed:"), 5)
       expect(failed).toContain("fail")
 

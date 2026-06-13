@@ -2,9 +2,17 @@ import { execFileSync } from "node:child_process"
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
+import { RegistryProvider } from "@effect/atom-react"
+import { createElement, type ReactElement } from "react"
 import type { SyntaxConfig } from "../src/syntax"
 
 export const disabledSyntax: SyntaxConfig = { enabled: false, status: "syntax disabled for tests" }
+
+// Each render test gets its own atom registry so module-global atoms (the git
+// Model, etc.) do not leak between tests sharing the default registry.
+export function withRegistry(node: ReactElement) {
+  return createElement(RegistryProvider, null, node)
+}
 
 export function runGit(repoRoot: string, args: string[]) {
   execFileSync("git", ["-c", "user.name=Sideye Test", "-c", "user.email=sideye-test@example.com", ...args], {

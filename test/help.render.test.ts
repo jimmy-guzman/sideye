@@ -5,7 +5,7 @@ import { createRoot } from "@opentui/react"
 import { createElement } from "react"
 import { App } from "../src/App"
 import { loadGitModel } from "../src/git"
-import { createFixtureRepo, disabledSyntax, makeSettleUntil } from "../test/helpers"
+import { createFixtureRepo, disabledSyntax, makeSettleUntil, withRegistry } from "../test/helpers"
 
 describe("help overlay", () => {
   test("opens with ?, lists every keybinding, swallows keys, and closes with escape", async () => {
@@ -15,7 +15,7 @@ describe("help overlay", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce })
 
     try {
-      createRoot(renderer).render(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax: disabledSyntax }))
+      createRoot(renderer).render(withRegistry(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax: disabledSyntax })))
       const initial = await settleUntil("app chrome", (frame) => frame.includes("sideye"), 5)
       expect(initial).toContain("? keys · q quit")
 

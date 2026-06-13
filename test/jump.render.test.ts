@@ -6,7 +6,7 @@ import { createRoot } from "@opentui/react"
 import { createElement } from "react"
 import { App } from "../src/App"
 import { loadGitModel } from "../src/git"
-import { createFixtureRepo, disabledSyntax, makeSettleUntil } from "../test/helpers"
+import { createFixtureRepo, disabledSyntax, makeSettleUntil, withRegistry } from "../test/helpers"
 
 describe("view toggle jumps", () => {
   test("v returns to the diff even from a line outside every hunk", async () => {
@@ -23,7 +23,7 @@ describe("view toggle jumps", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce })
 
     try {
-      createRoot(renderer).render(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax: disabledSyntax }))
+      createRoot(renderer).render(withRegistry(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax: disabledSyntax })))
       await settleUntil("diff view", (frame) => frame.includes("diff · ln"), 5)
 
       // Focus the viewer, switch to file view, and move far away from the hunk

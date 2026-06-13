@@ -6,7 +6,7 @@ import { createRoot } from "@opentui/react"
 import { createElement } from "react"
 import { App } from "../src/App"
 import { loadGitModel } from "../src/git"
-import { createFixtureRepo, disabledSyntax, makeSettleUntil, runGit } from "../test/helpers"
+import { createFixtureRepo, disabledSyntax, makeSettleUntil, runGit, withRegistry } from "../test/helpers"
 
 describe("worktree picker", () => {
   test("opens with w, escape keeps the current worktree, enter switches the whole app", async () => {
@@ -24,7 +24,7 @@ describe("worktree picker", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce })
 
     try {
-      createRoot(renderer).render(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax: disabledSyntax }))
+      createRoot(renderer).render(withRegistry(createElement(App, { model, scope: { kind: "all", ref: "HEAD" }, syntax: disabledSyntax })))
       const initial = await settleUntil("app chrome", (frame) => frame.includes("sideye") && frame.includes("main-only.ts"), 5)
       expect(initial).toContain("main-only.ts")
       expect(initial).not.toContain("side-only.ts")

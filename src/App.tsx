@@ -6,6 +6,7 @@ import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { emptyActivityLog, latestActivity, recordActivity, RECENT_MS } from "./activity"
 import { activityLogAtom, nowAtom, recencyByPathAtom } from "./atoms/activity"
+import { gitModelAtom } from "./atoms/git"
 import type { DiffScope } from "./cli"
 import { HeaderBar } from "./components/HeaderBar"
 import { HelpOverlay } from "./components/HelpOverlay"
@@ -19,11 +20,10 @@ import { PROBLEMS_HEIGHT } from "./constants"
 import { findingsLineMap, markPending, type Diagnostic } from "./diagnostics"
 import { contentToContextPatch, loadFileContent, type FileContent } from "./file-view"
 import { rankFiles } from "./fuzzy"
-import type { GitModel, Worktree } from "./git"
-import { loadFileDiff, loadGitModel } from "./git"
+import type { ChangedFile, GitModel, Worktree } from "./git"
+import { loadChangedFiles, loadFileDiff, loadGitModel, loadRepoFiles, mergeChanged } from "./git"
 import { useDiagnostics } from "./hooks/useDiagnostics"
 import { useDiffCursor } from "./hooks/useDiffCursor"
-import { useGitModel } from "./hooks/useGitModel"
 import { createKeyHandler } from "./keymap"
 import { renderPatch } from "./patch"
 import type { SyntaxConfig } from "./syntax"
@@ -42,7 +42,11 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const theme = useTheme()
   const { width, height } = useTerminalDimensions()
   const [scope, setScope] = useState(initialScope)
-  const { lastChangeRef, model, previousChangedRef, previousScopeKeyRef, setModel } = useGitModel(initialModel, scope)
+  const setGitModel = useAtomSet(gitModelAtom)
+  const model = useAtomValue(gitModelAtom) ?? initialModel
+  const previousChangedRef = useRef<ChangedFile[]>(initialModel.changed)
+  const previousScopeKeyRef = useRef(initialModel.scopeKey)
+  const lastChangeRef = useRef(Date.now())
   const [changesOnly, setChangesOnly] = useState(false)
   const [selectedPath, setSelectedPath] = useState<string | undefined>(initialModel.changed[0]?.path ?? initialModel.repoFiles[0]?.path)
   const [focusedRowIndex, setFocusedRowIndex] = useState(0)
@@ -195,6 +199,84 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     }
   }, [model.changed, model.scopeKey, lastChangeRef, previousChangedRef, previousScopeKeyRef, runChecksRef, setActivityLog, setCheckerState])
 
+  const repoRoot = model.repoRoot
+  useEffect(() => {
+    let cancelled = false
+    let fastInFlight = false
+    let slowInFlight = false
+
+    async function loadFast() {
+      if (fastInFlight) {
+        return
+      }
+      fastInFlight = true
+      try {
+        const next = await loadChangedFiles(repoRoot, scope)
+        if (!cancelled) {
+          // A worktree switch may commit between this poll starting and landing
+          setGitModel((previous) => {
+            const base = previous ?? initialModel
+            return base.repoRoot === repoRoot ? mergeChanged(base, next) : base
+          })
+        }
+      } catch {
+        // Transient git failures (e.g. an agent holding index.lock) resolve on the next poll
+      } finally {
+        fastInFlight = false
+      }
+    }
+
+    async function loadSlow() {
+      if (slowInFlight) {
+        return
+      }
+      slowInFlight = true
+      try {
+        const next = await loadRepoFiles(repoRoot)
+        if (!cancelled) {
+          setGitModel((previous) => {
+            const base = previous ?? initialModel
+            return base.repoRoot !== repoRoot || base.repoFilesKey === next.repoFilesKey
+              ? base
+              : { ...base, repoFiles: next.repoFiles, repoFilesKey: next.repoFilesKey }
+          })
+        }
+      } catch {
+        // Ignore transient errors
+      } finally {
+        slowInFlight = false
+      }
+    }
+
+    void loadFast()
+    void loadSlow()
+
+    // Adaptive fast poll: 750ms when active, 2000ms after 10s of quiet.
+    let fastId: ReturnType<typeof setTimeout>
+    function scheduleFast() {
+      const quiet = Date.now() - lastChangeRef.current > 10_000
+      fastId = setTimeout(
+        () => {
+          void loadFast()
+          if (!cancelled) {
+            scheduleFast()
+          }
+        },
+        quiet ? 2000 : 750,
+      )
+    }
+    scheduleFast()
+
+    // Separate long interval just for the expensive tracked-files list.
+    const slowId = setInterval(() => void loadSlow(), 5000)
+
+    return () => {
+      cancelled = true
+      clearTimeout(fastId)
+      clearInterval(slowId)
+    }
+  }, [repoRoot, scope, setGitModel, initialModel])
+
   useEffect(() => {
     if (selectedPath === undefined) {
       return
@@ -330,7 +412,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       previousChangedRef.current = fresh.changed
       previousScopeKeyRef.current = fresh.scopeKey
       lastChangeRef.current = Date.now()
-      setModel(fresh)
+      setGitModel(fresh)
       const selected = fresh.changed[0]?.path ?? fresh.repoFiles[0]?.path
       setSelectedPath(selected)
       setFocusedRowIndex(0)
