@@ -1,12 +1,14 @@
 import { existsSync } from "node:fs"
 import packageJson from "../package.json"
-import { useAtomSet, useAtomValue } from "@effect/atom-react"
+import { useAtomInitialValues, useAtomSet, useAtomValue } from "@effect/atom-react"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { emptyActivityLog, latestActivity, recordActivity, RECENT_MS } from "./activity"
 import { activityLogAtom, nowAtom, recencyByPathAtom } from "./atoms/activity"
 import { gitModelAtom } from "./atoms/git"
+import { treeRowsAtom } from "./atoms/tree"
+import { changesOnlyAtom, expandedDirectoriesAtom, selectedPathAtom } from "./atoms/ui"
 import type { DiffScope } from "./cli"
 import { HeaderBar } from "./components/HeaderBar"
 import { HelpOverlay } from "./components/HelpOverlay"
@@ -28,7 +30,7 @@ import { createKeyHandler } from "./keymap"
 import { renderPatch } from "./patch"
 import type { SyntaxConfig } from "./syntax"
 import { useTheme } from "./theme/context"
-import { buildFileTree, defaultExpandedDirectories, expandAncestorsForPath, findRowIndexForPath, flattenTree } from "./tree"
+import { defaultExpandedDirectories, expandAncestorsForPath, findRowIndexForPath } from "./tree"
 import { truncate, worktreeLabel } from "./ui-helpers"
 
 interface AppProps {
@@ -41,20 +43,28 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const renderer = useRenderer()
   const theme = useTheme()
   const { width, height } = useTerminalDimensions()
+
+  const initialSelectedPath = initialModel.changed[0]?.path ?? initialModel.repoFiles[0]?.path
+  const baseExpanded = defaultExpandedDirectories(initialModel.changed.map((file) => file.path))
+  const initialExpanded = initialSelectedPath === undefined ? baseExpanded : expandAncestorsForPath(baseExpanded, initialSelectedPath)
+  useAtomInitialValues([
+    [gitModelAtom, initialModel],
+    [selectedPathAtom, initialSelectedPath],
+    [expandedDirectoriesAtom, initialExpanded],
+  ])
+
   const [scope, setScope] = useState(initialScope)
   const setGitModel = useAtomSet(gitModelAtom)
   const model = useAtomValue(gitModelAtom) ?? initialModel
   const previousChangedRef = useRef<ChangedFile[]>(initialModel.changed)
   const previousScopeKeyRef = useRef(initialModel.scopeKey)
   const lastChangeRef = useRef(Date.now())
-  const [changesOnly, setChangesOnly] = useState(false)
-  const [selectedPath, setSelectedPath] = useState<string | undefined>(initialModel.changed[0]?.path ?? initialModel.repoFiles[0]?.path)
+  const setChangesOnly = useAtomSet(changesOnlyAtom)
+  const selectedPath = useAtomValue(selectedPathAtom)
+  const setSelectedPath = useAtomSet(selectedPathAtom)
   const [focusedRowIndex, setFocusedRowIndex] = useState(0)
-  const [expandedDirectories, setExpandedDirectories] = useState(() => {
-    const expanded = defaultExpandedDirectories(initialModel.changed.map((file) => file.path))
-    const selected = initialModel.changed[0]?.path ?? initialModel.repoFiles[0]?.path
-    return selected === undefined ? expanded : expandAncestorsForPath(expanded, selected)
-  })
+  const expandedDirectories = useAtomValue(expandedDirectoriesAtom)
+  const setExpandedDirectories = useAtomSet(expandedDirectoriesAtom)
   const [fullContentPaths, setFullContentPaths] = useState<Set<string>>(() => new Set())
   const [fileView, setFileView] = useState(false)
   const [focusedPane, setFocusedPane] = useState<"tree" | "diff" | "problems">("tree")
@@ -95,11 +105,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
 
   const selectedFile = selectedPath === undefined ? undefined : model.changedByPath.get(selectedPath)
   const showFileContent = selectedPath !== undefined && (selectedFile === undefined || fileView)
-  const tree = useMemo(
-    () => buildFileTree(model.repoFiles, model.changedByPath, { changesOnly }),
-    [changesOnly, model.changedByPath, model.repoFiles],
-  )
-  const treeRows = useMemo(() => flattenTree(tree, expandedDirectories), [expandedDirectories, tree])
+  const treeRows = useAtomValue(treeRowsAtom)
   const changedPathSet = useMemo(() => new Set(model.changedByPath.keys()), [model.changedByPath])
   // Hoisted out of paletteResults so a keystroke only pays for ranking
   const allPaths = useMemo(
@@ -331,11 +337,14 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     viewerHeight,
   })
 
-  const selectFile = useCallback((path: string) => {
-    setSelectedPath(path)
-    setFileView(false)
-    setExpandedDirectories((current) => expandAncestorsForPath(current, path))
-  }, [])
+  const selectFile = useCallback(
+    (path: string) => {
+      setSelectedPath(path)
+      setFileView(false)
+      setExpandedDirectories((current) => expandAncestorsForPath(current, path))
+    },
+    [setSelectedPath, setExpandedDirectories],
+  )
 
   useKeyboard(
     createKeyHandler({
