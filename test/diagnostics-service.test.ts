@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs"
+import { rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { expect, test } from "bun:test"
 import { Effect, Layer, Stream } from "effect"
@@ -11,17 +11,21 @@ test("Diagnostics.run streams a state for each configured checker", async () => 
     "a.ts": "const a = 1\n",
     "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
   })
-  writeFileSync(join(repo, "a.ts"), "const a = 2\n")
-  const model = await loadModel(repo, { kind: "all", ref: "HEAD" })
+  try {
+    writeFileSync(join(repo, "a.ts"), "const a = 2\n")
+    const model = await loadModel(repo, { kind: "all", ref: "HEAD" })
 
-  const updates = await Effect.runPromise(
-    Diagnostics.pipe(
-      Effect.flatMap((diagnostics) => Stream.runCollect(diagnostics.run(repo, model.changed))),
-      Effect.provide(DiagnosticsLive.pipe(Layer.provide(ProcessLive))),
-    ),
-  )
+    const updates = await Effect.runPromise(
+      Diagnostics.pipe(
+        Effect.flatMap((diagnostics) => Stream.runCollect(diagnostics.run(repo, model.changed))),
+        Effect.provide(DiagnosticsLive.pipe(Layer.provide(ProcessLive))),
+      ),
+    )
 
-  const checkers = [...updates].map((update) => update.checker)
-  expect(checkers).toContain("lint")
-  expect(checkers).toContain("typecheck")
+    const checkers = [...updates].map((update) => update.checker)
+    expect(checkers).toContain("lint")
+    expect(checkers).toContain("typecheck")
+  } finally {
+    rmSync(repo, { force: true, recursive: true })
+  }
 })
