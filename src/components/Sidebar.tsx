@@ -46,7 +46,7 @@ export function Sidebar({
           <TreeRow
             key={row.node.id}
             row={row}
-            focused={row.index === focusedRowIndex}
+            focused={focused && row.index === focusedRowIndex}
             selectedPath={selectedPath}
             expandedDirectories={expandedDirectories}
             checkerState={checkerState}
