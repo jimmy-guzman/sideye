@@ -3,6 +3,7 @@ import { join } from "node:path"
 import { expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Git, GitLive } from "../src/services/git"
+import { ProcessLive } from "../src/services/process"
 import { createFixtureRepo } from "./helpers"
 
 const allScope = { kind: "all", ref: "HEAD" } as const
@@ -15,6 +16,7 @@ test("Git.loadModel reports a modified file with churn counts", async () => {
     Git.pipe(
       Effect.flatMap((git) => git.loadModel(repo, allScope)),
       Effect.provide(GitLive),
+      Effect.provide(ProcessLive),
     ),
   )
 
@@ -31,6 +33,7 @@ test("Git.changedFiles includes an untracked file", async () => {
     Git.pipe(
       Effect.flatMap((git) => git.changedFiles(repo, allScope)),
       Effect.provide(GitLive),
+      Effect.provide(ProcessLive),
     ),
   )
 

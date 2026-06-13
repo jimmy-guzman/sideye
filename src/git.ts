@@ -113,12 +113,24 @@ export async function loadChangedFiles(
     runCommandAsync(["git", "status", "--porcelain=v1", "-z"], repoRoot),
   ])
 
-  const untracked = scope.kind === "staged" ? [] : parseUntrackedFiles(untrackedFiles.stdout)
-  const nameStatus = parseNameStatus(nameStatusResult.stdout)
+  return assembleChanged(repoRoot, scope, untrackedFiles.stdout, nameStatusResult.stdout, numstatResult.stdout, porcelain.stdout)
+}
+
+// Pure assembly of the changed set from raw git output, shared by the loaders and the Git service.
+export function assembleChanged(
+  repoRoot: string,
+  scope: DiffScope,
+  untrackedOutput: string,
+  nameStatusOutput: string,
+  numstatOutput: string,
+  porcelainOutput: string,
+): Pick<GitModel, "changed" | "changedByPath" | "scopeKey"> {
+  const untracked = scope.kind === "staged" ? [] : parseUntrackedFiles(untrackedOutput)
+  const nameStatus = parseNameStatus(nameStatusOutput)
   const statusByPath = new Map([...nameStatus, ...untracked].map((entry) => [entry.path, entry]))
-  const numstat = parseNumstat(numstatResult.stdout)
+  const numstat = parseNumstat(numstatOutput)
   const numstatByPath = new Map(numstat.map((entry) => [entry.path, entry]))
-  const stageByPath = parsePorcelainStatus(porcelain.stdout)
+  const stageByPath = parsePorcelainStatus(porcelainOutput)
   const paths = new Set([...numstatByPath.keys(), ...statusByPath.keys()])
 
   const changed = [...paths]
@@ -146,6 +158,25 @@ export async function loadChangedFiles(
     changed,
     changedByPath: new Map(changed.map((file) => [file.path, file])),
     scopeKey: `${scope.kind}:${scope.ref}`,
+  }
+}
+
+// Pure assembly of the full model (changed set + repo file list) from raw output.
+export function assembleModel(
+  repoRoot: string,
+  scope: DiffScope,
+  trackedOutput: string,
+  untrackedOutput: string,
+  nameStatusOutput: string,
+  numstatOutput: string,
+  porcelainOutput: string,
+): GitModel {
+  const repoFilesKey = `${trackedOutput}\x01${untrackedOutput}`
+  return {
+    ...assembleChanged(repoRoot, scope, untrackedOutput, nameStatusOutput, numstatOutput, porcelainOutput),
+    repoFiles: parseRepoFiles(trackedOutput, untrackedOutput, repoFilesKey),
+    repoFilesKey,
+    repoRoot,
   }
 }
 
@@ -191,47 +222,15 @@ export async function loadGitModel(repoRoot: string, scope: DiffScope): Promise<
     runCommandAsync(["git", "status", "--porcelain=v1", "-z"], repoRoot),
   ])
 
-  const trackedOutput = tracked.stdout
-  const untrackedOutput = untrackedFiles.stdout
-  const untracked = scope.kind === "staged" ? [] : parseUntrackedFiles(untrackedOutput)
-  const nameStatus = parseNameStatus(nameStatusResult.stdout)
-  const statusByPath = new Map([...nameStatus, ...untracked].map((entry) => [entry.path, entry]))
-  const numstat = parseNumstat(numstatResult.stdout)
-  const numstatByPath = new Map(numstat.map((entry) => [entry.path, entry]))
-  const stageByPath = parsePorcelainStatus(porcelain.stdout)
-  const paths = new Set([...numstatByPath.keys(), ...statusByPath.keys()])
-
-  const changed = [...paths]
-    .map((path) => {
-      const stat = numstatByPath.get(path)
-      const statusEntry = statusByPath.get(path)
-      const kind = statusEntry?.kind ?? inferKind(path, stat?.deletions ?? 0, stat?.additions ?? 0)
-      const untrackedStat = kind === "untracked" && stat === undefined ? statUntrackedFile(repoRoot, path) : undefined
-      const file: ChangedFile = {
-        additions: stat?.additions ?? untrackedStat?.additions ?? 0,
-        binary: stat?.binary ?? untrackedStat?.binary ?? false,
-        deletions: stat?.deletions ?? 0,
-        kind,
-        mtimeMs: kind === "deleted" ? 0 : fileMtime(repoRoot, path),
-        oldPath: statusEntry?.oldPath,
-        path,
-        stage: stageByPath.get(path) ?? (kind === "untracked" ? "untracked" : "unstaged"),
-        warnings: warningsFor(path, kind, stat?.additions ?? untrackedStat?.additions ?? 0, stat?.deletions ?? 0),
-      }
-      return file
-    })
-    .toSorted((a, b) => a.path.localeCompare(b.path))
-
-  const repoFilesKey = `${trackedOutput}\x01${untrackedOutput}`
-
-  return {
-    changed,
-    changedByPath: new Map(changed.map((file) => [file.path, file])),
-    repoFiles: parseRepoFiles(trackedOutput, untrackedOutput, repoFilesKey),
-    repoFilesKey,
+  return assembleModel(
     repoRoot,
-    scopeKey: `${scope.kind}:${scope.ref}`,
-  }
+    scope,
+    tracked.stdout,
+    untrackedFiles.stdout,
+    nameStatusResult.stdout,
+    numstatResult.stdout,
+    porcelain.stdout,
+  )
 }
 
 export function loadFileDiff(repoRoot: string, scope: DiffScope, file: ChangedFile) {
@@ -348,7 +347,7 @@ function changedSignature(files: ChangedFile[]) {
 
 let repoFilesCache: { key: string; repoFiles: RepoFile[] } | undefined
 
-function parseRepoFiles(trackedOutput: string, untrackedOutput: string, key: string): RepoFile[] {
+export function parseRepoFiles(trackedOutput: string, untrackedOutput: string, key: string): RepoFile[] {
   if (repoFilesCache?.key === key) {
     return repoFilesCache.repoFiles
   }
