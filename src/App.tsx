@@ -1,13 +1,13 @@
 import { existsSync } from "node:fs"
 import packageJson from "../package.json"
-import { RegistryContext, useAtomInitialValues, useAtomSet, useAtomValue } from "@effect/atom-react"
+import { RegistryContext, useAtomInitialValues, useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react"
 import { useCallback, useContext, useEffect, useRef } from "react"
 import { emptyActivityLog, latestActivity, recordActivity, RECENT_MS } from "./activity"
 import { activityLogAtom, nowAtom, recencyByPathAtom } from "./atoms/activity"
 import { allProblemItemsAtom, checkerStateAtom, countsAtom, lineMapAtom, runChecksAtom, statusAtom } from "./atoms/diagnostics"
-import { gitModelAtom } from "./atoms/git"
+import { gitModelAtom, gitPollAtom, lastChangeAtom, repoRootAtom } from "./atoms/git"
 import { paletteResultsAtom } from "./atoms/palette"
 import { focusedRowIndexAtom, treeRowsAtom } from "./atoms/tree"
 import {
@@ -49,7 +49,7 @@ import { WorktreePicker } from "./components/WorktreePicker"
 import { PROBLEMS_HEIGHT } from "./constants"
 import { initialCheckerState, markPending } from "./diagnostics"
 import type { ChangedFile, GitModel, Worktree } from "./git"
-import { loadChangedFiles, loadGitModel, loadRepoFiles, mergeChanged } from "./git"
+import { loadGitModel } from "./git"
 import { useDiffCursor } from "./hooks/useDiffCursor"
 import { createKeyHandler } from "./keymap"
 import type { SyntaxConfig } from "./syntax"
@@ -74,6 +74,8 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const initialExpanded = initialSelectedPath === undefined ? baseExpanded : expandAncestorsForPath(baseExpanded, initialSelectedPath)
   useAtomInitialValues([
     [gitModelAtom, initialModel],
+    [repoRootAtom, initialModel.repoRoot],
+    [lastChangeAtom, Date.now()],
     [scopeAtom, initialScope],
     [selectedPathAtom, initialSelectedPath],
     [focusedNodeIdAtom, initialSelectedPath === undefined ? "" : `file:${initialSelectedPath}`],
@@ -87,7 +89,9 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
   const model = useAtomValue(gitModelAtom)
   const previousChangedRef = useRef<ChangedFile[]>(initialModel.changed)
   const previousScopeKeyRef = useRef(initialModel.scopeKey)
-  const lastChangeRef = useRef(Date.now())
+  const setLastChange = useAtomSet(lastChangeAtom)
+  const setRepoRoot = useAtomSet(repoRootAtom)
+  useAtomMount(gitPollAtom)
   const selectedPath = useAtomValue(selectedPathAtom)
   const setSelectedPath = useAtomSet(selectedPathAtom)
   const focusedRowIndex = useAtomValue(focusedRowIndexAtom)
@@ -174,7 +178,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     }
 
     if (entries.length > 0) {
-      lastChangeRef.current = Date.now()
+      setLastChange(Date.now())
       setCheckerState((current) =>
         markPending(
           current,
@@ -184,7 +188,7 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       )
       setActivityLog((current) => recordActivity(current, entries, Date.now()))
     }
-  }, [model, lastChangeRef, previousChangedRef, previousScopeKeyRef, runChecks, setActivityLog, setCheckerState])
+  }, [model, setLastChange, previousChangedRef, previousScopeKeyRef, runChecks, setActivityLog, setCheckerState])
 
   useEffect(() => {
     runChecks(model)
@@ -203,80 +207,6 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
     const id = setTimeout(() => runChecks(model), 2000)
     return () => clearTimeout(id)
   }, [activityLog, model, runChecks])
-
-  const repoRoot = model.repoRoot
-  useEffect(() => {
-    let cancelled = false
-    let fastInFlight = false
-    let slowInFlight = false
-
-    async function loadFast() {
-      if (fastInFlight) {
-        return
-      }
-      fastInFlight = true
-      try {
-        const next = await loadChangedFiles(repoRoot, scope)
-        if (!cancelled) {
-          // A worktree switch may commit between this poll starting and landing
-          setGitModel((previous) => (previous.repoRoot === repoRoot ? mergeChanged(previous, next) : previous))
-        }
-      } catch {
-        // Transient git failures (e.g. an agent holding index.lock) resolve on the next poll
-      } finally {
-        fastInFlight = false
-      }
-    }
-
-    async function loadSlow() {
-      if (slowInFlight) {
-        return
-      }
-      slowInFlight = true
-      try {
-        const next = await loadRepoFiles(repoRoot)
-        if (!cancelled) {
-          setGitModel((previous) =>
-            previous.repoRoot !== repoRoot || previous.repoFilesKey === next.repoFilesKey
-              ? previous
-              : { ...previous, repoFiles: next.repoFiles, repoFilesKey: next.repoFilesKey },
-          )
-        }
-      } catch {
-        // Ignore transient errors
-      } finally {
-        slowInFlight = false
-      }
-    }
-
-    void loadFast()
-    void loadSlow()
-
-    // Adaptive fast poll: 750ms when active, 2000ms after 10s of quiet.
-    let fastId: ReturnType<typeof setTimeout>
-    function scheduleFast() {
-      const quiet = Date.now() - lastChangeRef.current > 10_000
-      fastId = setTimeout(
-        () => {
-          void loadFast()
-          if (!cancelled) {
-            scheduleFast()
-          }
-        },
-        quiet ? 2000 : 750,
-      )
-    }
-    scheduleFast()
-
-    // Separate long interval just for the expensive tracked-files list.
-    const slowId = setInterval(() => void loadSlow(), 5000)
-
-    return () => {
-      cancelled = true
-      clearTimeout(fastId)
-      clearInterval(slowId)
-    }
-  }, [repoRoot, scope, setGitModel])
 
   useEffect(() => {
     const focusedRow = treeRows[focusedRowIndex]
@@ -355,7 +285,8 @@ export function App({ model: initialModel, scope: initialScope, syntax }: AppPro
       // ScopeKey matches across worktrees, so that effect will not re-run checks
       previousChangedRef.current = fresh.changed
       previousScopeKeyRef.current = fresh.scopeKey
-      lastChangeRef.current = Date.now()
+      setLastChange(Date.now())
+      setRepoRoot(fresh.repoRoot)
       setGitModel(fresh)
       const selected = fresh.changed[0]?.path ?? fresh.repoFiles[0]?.path
       setSelectedPath(selected)

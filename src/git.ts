@@ -180,19 +180,6 @@ export function assembleModel(
   }
 }
 
-export async function loadRepoFiles(repoRoot: string): Promise<Pick<GitModel, "repoFiles" | "repoFilesKey">> {
-  const [tracked, untrackedFiles] = await Promise.all([
-    runCommandAsync(["git", "ls-files", "-z"], repoRoot),
-    runCommandAsync(["git", "ls-files", "--others", "--exclude-standard", "-z"], repoRoot),
-  ])
-
-  const trackedOutput = tracked.stdout
-  const untrackedOutput = untrackedFiles.stdout
-  const repoFilesKey = `${trackedOutput}\x01${untrackedOutput}`
-
-  return { repoFiles: parseRepoFiles(trackedOutput, untrackedOutput, repoFilesKey), repoFilesKey }
-}
-
 export function mergeChanged(prev: GitModel, next: Pick<GitModel, "changed" | "changedByPath" | "scopeKey">): GitModel {
   if (prev.scopeKey === next.scopeKey && changedSignature(prev.changed) === changedSignature(next.changed)) {
     return prev
