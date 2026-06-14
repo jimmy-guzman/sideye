@@ -2,6 +2,8 @@ import bashHighlights from "../assets/tree-sitter/bash/highlights.scm" with { ty
 import bashWasm from "../assets/tree-sitter/bash/tree-sitter-bash.wasm" with { type: "file" };
 import jsonHighlights from "../assets/tree-sitter/json/highlights.scm" with { type: "file" };
 import jsonWasm from "../assets/tree-sitter/json/tree-sitter-json.wasm" with { type: "file" };
+import tsxJsxHighlights from "../assets/tree-sitter/tsx/jsx.scm" with { type: "file" };
+import tsxWasm from "../assets/tree-sitter/tsx/tree-sitter-tsx.wasm" with { type: "file" };
 import tsTestGlobalsHighlights from "../assets/tree-sitter/typescript/test-globals.scm" with { type: "file" };
 import yamlHighlights from "../assets/tree-sitter/yaml/highlights.scm" with { type: "file" };
 import yamlWasm from "../assets/tree-sitter/yaml/tree-sitter-yaml.wasm" with { type: "file" };
@@ -29,14 +31,22 @@ export interface Language {
 // Derive from this table
 export const languages: Language[] = [
   {
-    aliases: ["typescriptreact"],
-    extensions: [".ts", ".tsx"],
+    extensions: [".ts"],
     filetype: "typescript",
     highlights: [tsBundledHighlights, tsTestGlobalsHighlights],
     replacesBundled: true,
     wasm: tsBundledWasm,
   },
-  { extensions: [".js", ".jsx"], filetype: "javascript", highlights: [jsBundledHighlights] },
+  {
+    // The bundled typescript and javascript grammars mishandle JSX, so .tsx and
+    // .jsx render with the tsx grammar (a superset that parses both)
+    aliases: ["typescriptreact", "javascriptreact"],
+    extensions: [".tsx", ".jsx"],
+    filetype: "tsx",
+    highlights: [tsBundledHighlights, tsxJsxHighlights, tsTestGlobalsHighlights],
+    wasm: tsxWasm,
+  },
+  { extensions: [".js"], filetype: "javascript", highlights: [jsBundledHighlights] },
   {
     extensions: [".sh", ".bash", ".zsh"],
     filetype: "bash",

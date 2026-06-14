@@ -24,7 +24,8 @@ const enabledSyntax: SyntaxConfig = {
 
 describe("diffFiletypeFor", () => {
   test("uses supported parser filetypes when syntax is enabled", () => {
-    expect(diffFiletypeFor("src/App.tsx", enabledSyntax)).toBe("typescript");
+    expect(diffFiletypeFor("src/main.ts", enabledSyntax)).toBe("typescript");
+    expect(diffFiletypeFor("src/App.tsx", enabledSyntax)).toBe("tsx");
     expect(diffFiletypeFor("README.md", enabledSyntax)).toBe("markdown");
     expect(diffFiletypeFor("install.sh", enabledSyntax)).toBe("bash");
     expect(diffFiletypeFor("package.json", enabledSyntax)).toBe("json");

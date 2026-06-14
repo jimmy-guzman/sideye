@@ -5,15 +5,15 @@ import { filetypeFor, supportedFiletypeFor } from "../src/filetype";
 describe("supportedFiletypeFor", () => {
   test("returns bundled OpenTUI parser filetypes", () => {
     expect(supportedFiletypeFor("src/a.ts")).toBe("typescript");
-    expect(supportedFiletypeFor("src/a.tsx")).toBe("typescript");
     expect(supportedFiletypeFor("src/a.js")).toBe("javascript");
-    expect(supportedFiletypeFor("src/a.jsx")).toBe("javascript");
     expect(supportedFiletypeFor("README.md")).toBe("markdown");
     expect(supportedFiletypeFor("docs/page.mdx")).toBe("markdown");
     expect(supportedFiletypeFor("src/main.zig")).toBe("zig");
   });
 
   test("returns vendored parser filetypes", () => {
+    expect(supportedFiletypeFor("src/a.tsx")).toBe("tsx");
+    expect(supportedFiletypeFor("src/a.jsx")).toBe("tsx");
     expect(supportedFiletypeFor("install.sh")).toBe("bash");
     expect(supportedFiletypeFor("scripts/setup.bash")).toBe("bash");
     expect(supportedFiletypeFor(".zshrc.zsh")).toBe("bash");
