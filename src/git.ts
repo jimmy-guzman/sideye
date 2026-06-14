@@ -1,63 +1,64 @@
-import { statSync } from "node:fs"
-import type { DiffScope } from "./cli"
-import { loadFileContent } from "./file-view"
+import { statSync } from "node:fs";
 
-export type ChangeKind = "modified" | "added" | "deleted" | "renamed" | "untracked"
+import type { DiffScope } from "./cli";
+import { loadFileContent } from "./file-view";
 
-export type StageState = "staged" | "unstaged" | "mixed" | "untracked"
+export type ChangeKind = "modified" | "added" | "deleted" | "renamed" | "untracked";
+
+export type StageState = "staged" | "unstaged" | "mixed" | "untracked";
 
 export interface ChangedFile {
-  path: string
-  oldPath?: string
-  kind: ChangeKind
-  stage: StageState
-  additions: number
-  deletions: number
-  binary: boolean
-  warnings: string[]
+  path: string;
+  oldPath?: string;
+  kind: ChangeKind;
+  stage: StageState;
+  additions: number;
+  deletions: number;
+  binary: boolean;
+  warnings: string[];
   // Worktree mtime so edits that keep the churn counts identical still register
-  mtimeMs: number
+  mtimeMs: number;
 }
 
 export interface RepoFile {
-  path: string
-  tracked: boolean
+  path: string;
+  tracked: boolean;
 }
 
 export interface GitModel {
-  repoRoot: string
-  scopeKey: string
-  changed: ChangedFile[]
-  changedByPath: Map<string, ChangedFile>
-  repoFiles: RepoFile[]
-  repoFilesKey: string
+  repoRoot: string;
+  scopeKey: string;
+  changed: ChangedFile[];
+  changedByPath: Map<string, ChangedFile>;
+  repoFiles: RepoFile[];
+  repoFilesKey: string;
 }
 
 interface StatusEntry {
-  path: string
-  oldPath?: string
-  kind: ChangeKind
+  path: string;
+  oldPath?: string;
+  kind: ChangeKind;
 }
 
 export interface Worktree {
-  path: string
-  head: string
-  branch?: string
-  detached: boolean
-  bare: boolean
-  locked: boolean
-  prunable: boolean
+  path: string;
+  head: string;
+  branch?: string;
+  detached: boolean;
+  bare: boolean;
+  locked: boolean;
+  prunable: boolean;
 }
 
 export function parseWorktreeList(output: string): Worktree[] {
-  const worktrees: Worktree[] = []
+  const worktrees: Worktree[] = [];
 
   // With -z every attribute line ends in NUL and each record ends in an extra NUL
   for (const record of output.split("\0\0")) {
-    const attributes = record.split("\0").filter((line) => line !== "")
-    const first = attributes[0]
+    const attributes = record.split("\0").filter((line) => line !== "");
+    const first = attributes[0];
     if (first === undefined || !first.startsWith("worktree ")) {
-      continue
+      continue;
     }
 
     const worktree: Worktree = {
@@ -67,29 +68,29 @@ export function parseWorktreeList(output: string): Worktree[] {
       locked: false,
       path: first.slice("worktree ".length),
       prunable: false,
-    }
+    };
 
     for (const attribute of attributes.slice(1)) {
       if (attribute.startsWith("HEAD ")) {
-        worktree.head = attribute.slice("HEAD ".length)
+        worktree.head = attribute.slice("HEAD ".length);
       } else if (attribute.startsWith("branch ")) {
-        const ref = attribute.slice("branch ".length)
-        worktree.branch = ref.startsWith("refs/heads/") ? ref.slice("refs/heads/".length) : ref
+        const ref = attribute.slice("branch ".length);
+        worktree.branch = ref.startsWith("refs/heads/") ? ref.slice("refs/heads/".length) : ref;
       } else if (attribute === "bare") {
-        worktree.bare = true
+        worktree.bare = true;
       } else if (attribute === "detached") {
-        worktree.detached = true
+        worktree.detached = true;
       } else if (attribute === "locked" || attribute.startsWith("locked ")) {
-        worktree.locked = true
+        worktree.locked = true;
       } else if (attribute === "prunable" || attribute.startsWith("prunable ")) {
-        worktree.prunable = true
+        worktree.prunable = true;
       }
     }
 
-    worktrees.push(worktree)
+    worktrees.push(worktree);
   }
 
-  return worktrees
+  return worktrees;
 }
 
 // Pure assembly of the changed set from raw git output, shared by the loaders and the Git service.
@@ -101,20 +102,21 @@ export function assembleChanged(
   numstatOutput: string,
   porcelainOutput: string,
 ): Pick<GitModel, "changed" | "changedByPath" | "scopeKey"> {
-  const untracked = scope.kind === "staged" ? [] : parseUntrackedFiles(untrackedOutput)
-  const nameStatus = parseNameStatus(nameStatusOutput)
-  const statusByPath = new Map([...nameStatus, ...untracked].map((entry) => [entry.path, entry]))
-  const numstat = parseNumstat(numstatOutput)
-  const numstatByPath = new Map(numstat.map((entry) => [entry.path, entry]))
-  const stageByPath = parsePorcelainStatus(porcelainOutput)
-  const paths = new Set([...numstatByPath.keys(), ...statusByPath.keys()])
+  const untracked = scope.kind === "staged" ? [] : parseUntrackedFiles(untrackedOutput);
+  const nameStatus = parseNameStatus(nameStatusOutput);
+  const statusByPath = new Map([...nameStatus, ...untracked].map((entry) => [entry.path, entry]));
+  const numstat = parseNumstat(numstatOutput);
+  const numstatByPath = new Map(numstat.map((entry) => [entry.path, entry]));
+  const stageByPath = parsePorcelainStatus(porcelainOutput);
+  const paths = new Set([...numstatByPath.keys(), ...statusByPath.keys()]);
 
   const changed = [...paths]
     .map((path) => {
-      const stat = numstatByPath.get(path)
-      const statusEntry = statusByPath.get(path)
-      const kind = statusEntry?.kind ?? inferKind(path, stat?.deletions ?? 0, stat?.additions ?? 0)
-      const untrackedStat = kind === "untracked" && stat === undefined ? statUntrackedFile(repoRoot, path) : undefined
+      const stat = numstatByPath.get(path);
+      const statusEntry = statusByPath.get(path);
+      const kind = statusEntry?.kind ?? inferKind(path, stat?.deletions ?? 0, stat?.additions ?? 0);
+      const untrackedStat =
+        kind === "untracked" && stat === undefined ? statUntrackedFile(repoRoot, path) : undefined;
       const file: ChangedFile = {
         additions: stat?.additions ?? untrackedStat?.additions ?? 0,
         binary: stat?.binary ?? untrackedStat?.binary ?? false,
@@ -124,17 +126,22 @@ export function assembleChanged(
         oldPath: statusEntry?.oldPath,
         path,
         stage: stageByPath.get(path) ?? (kind === "untracked" ? "untracked" : "unstaged"),
-        warnings: warningsFor(path, kind, stat?.additions ?? untrackedStat?.additions ?? 0, stat?.deletions ?? 0),
-      }
-      return file
+        warnings: warningsFor(
+          path,
+          kind,
+          stat?.additions ?? untrackedStat?.additions ?? 0,
+          stat?.deletions ?? 0,
+        ),
+      };
+      return file;
     })
-    .toSorted((a, b) => a.path.localeCompare(b.path))
+    .toSorted((a, b) => a.path.localeCompare(b.path));
 
   return {
     changed,
     changedByPath: new Map(changed.map((file) => [file.path, file])),
     scopeKey: `${scope.kind}:${scope.ref}`,
-  }
+  };
 }
 
 // Pure assembly of the full model (changed set + repo file list) from raw output.
@@ -147,79 +154,105 @@ export function assembleModel(
   numstatOutput: string,
   porcelainOutput: string,
 ): GitModel {
-  const repoFilesKey = `${trackedOutput}\x01${untrackedOutput}`
+  const repoFilesKey = `${trackedOutput}\x01${untrackedOutput}`;
   return {
-    ...assembleChanged(repoRoot, scope, untrackedOutput, nameStatusOutput, numstatOutput, porcelainOutput),
+    ...assembleChanged(
+      repoRoot,
+      scope,
+      untrackedOutput,
+      nameStatusOutput,
+      numstatOutput,
+      porcelainOutput,
+    ),
     repoFiles: parseRepoFiles(trackedOutput, untrackedOutput, repoFilesKey),
     repoFilesKey,
     repoRoot,
-  }
+  };
 }
 
-export function mergeChanged(prev: GitModel, next: Pick<GitModel, "changed" | "changedByPath" | "scopeKey">): GitModel {
-  if (prev.scopeKey === next.scopeKey && changedSignature(prev.changed) === changedSignature(next.changed)) {
-    return prev
+export function mergeChanged(
+  prev: GitModel,
+  next: Pick<GitModel, "changed" | "changedByPath" | "scopeKey">,
+): GitModel {
+  if (
+    prev.scopeKey === next.scopeKey &&
+    changedSignature(prev.changed) === changedSignature(next.changed)
+  ) {
+    return prev;
   }
 
   const changed = next.changed.map((file) => {
-    const before = prev.changedByPath.get(file.path)
-    return before !== undefined && sameChangedFile(before, file) ? before : file
-  })
+    const before = prev.changedByPath.get(file.path);
+    return before !== undefined && sameChangedFile(before, file) ? before : file;
+  });
 
   // If every entry in changed is the same reference as next.changed[index], no
   // File was reused from prev — skip building a new Map and return next's
   // References directly.
-  if (prev.scopeKey === next.scopeKey && changed.every((file, index) => file === next.changed[index])) {
-    return { ...prev, changed: next.changed, changedByPath: next.changedByPath, scopeKey: next.scopeKey }
+  if (
+    prev.scopeKey === next.scopeKey &&
+    changed.every((file, index) => file === next.changed[index])
+  ) {
+    return {
+      ...prev,
+      changed: next.changed,
+      changedByPath: next.changedByPath,
+      scopeKey: next.scopeKey,
+    };
   }
 
-  return { ...prev, changed, changedByPath: new Map(changed.map((file) => [file.path, file])), scopeKey: next.scopeKey }
+  return {
+    ...prev,
+    changed,
+    changedByPath: new Map(changed.map((file) => [file.path, file])),
+    scopeKey: next.scopeKey,
+  };
 }
 
 export function numstatArgs(scope: DiffScope) {
   // -z keeps non-ASCII paths literal instead of core.quotePath's C-quoting
-  return [...diffArgs(scope), "--numstat", "-z"]
+  return [...diffArgs(scope), "--numstat", "-z"];
 }
 
 export function nameStatusArgs(scope: DiffScope) {
-  return [...diffArgs(scope), "--name-status", "-z"]
+  return [...diffArgs(scope), "--name-status", "-z"];
 }
 
 export function diffArgs(scope: DiffScope) {
   if (scope.kind === "staged") {
-    return ["git", "diff", "--cached", scope.ref]
+    return ["git", "diff", "--cached", scope.ref];
   }
 
   if (scope.kind === "unstaged") {
-    return ["git", "diff"]
+    return ["git", "diff"];
   }
 
-  return ["git", "diff", scope.ref]
+  return ["git", "diff", scope.ref];
 }
 
 export function parsePorcelainStatus(output: string): Map<string, StageState> {
-  const stageByPath = new Map<string, StageState>()
-  const tokens = output.split("\0")
+  const stageByPath = new Map<string, StageState>();
+  const tokens = output.split("\0");
 
   for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index]
+    const token = tokens[index];
     if (token === undefined || token.length < 4) {
-      continue
+      continue;
     }
 
-    const stage = stageFromCodes(token[0] ?? " ", token[1] ?? " ")
-    stageByPath.set(token.slice(3), stage)
+    const stage = stageFromCodes(token[0] ?? " ", token[1] ?? " ");
+    stageByPath.set(token.slice(3), stage);
 
     if (token.startsWith("R") || token.startsWith("C") || token[1] === "R" || token[1] === "C") {
-      const original = tokens[index + 1]
+      const original = tokens[index + 1];
       if (original !== undefined && original !== "") {
-        stageByPath.set(original, stage)
+        stageByPath.set(original, stage);
       }
-      index += 1
+      index += 1;
     }
   }
 
-  return stageByPath
+  return stageByPath;
 }
 
 export function mergeModel(prev: GitModel, next: GitModel): GitModel {
@@ -229,20 +262,20 @@ export function mergeModel(prev: GitModel, next: GitModel): GitModel {
     prev.repoFilesKey === next.repoFilesKey &&
     changedSignature(prev.changed) === changedSignature(next.changed)
   ) {
-    return prev
+    return prev;
   }
 
   // Keep identity for untouched files so per-file memos (e.g. the selected diff) hold
   const changed = next.changed.map((file) => {
-    const before = prev.changedByPath.get(file.path)
-    return before !== undefined && sameChangedFile(before, file) ? before : file
-  })
+    const before = prev.changedByPath.get(file.path);
+    return before !== undefined && sameChangedFile(before, file) ? before : file;
+  });
 
   if (changed.every((file, index) => file === next.changed[index])) {
-    return next
+    return next;
   }
 
-  return { ...next, changed, changedByPath: new Map(changed.map((file) => [file.path, file])) }
+  return { ...next, changed, changedByPath: new Map(changed.map((file) => [file.path, file])) };
 }
 
 function sameChangedFile(a: ChangedFile, b: ChangedFile) {
@@ -255,180 +288,192 @@ function sameChangedFile(a: ChangedFile, b: ChangedFile) {
     a.deletions === b.deletions &&
     a.binary === b.binary &&
     a.mtimeMs === b.mtimeMs
-  )
+  );
 }
 
 function stageFromCodes(index: string, worktree: string): StageState {
   if (index === "?" && worktree === "?") {
-    return "untracked"
+    return "untracked";
   }
 
-  const staged = index !== " " && index !== "?"
-  const unstaged = worktree !== " " && worktree !== "?"
+  const staged = index !== " " && index !== "?";
+  const unstaged = worktree !== " " && worktree !== "?";
   if (staged && unstaged) {
-    return "mixed"
+    return "mixed";
   }
 
-  return staged ? "staged" : "unstaged"
+  return staged ? "staged" : "unstaged";
 }
 
 function changedSignature(files: ChangedFile[]) {
   return files
-    .map((file) => `${file.path}\0${file.kind}\0${file.stage}\0${file.additions}\0${file.deletions}\0${file.mtimeMs}`)
-    .join("\x01")
+    .map(
+      (file) =>
+        `${file.path}\0${file.kind}\0${file.stage}\0${file.additions}\0${file.deletions}\0${file.mtimeMs}`,
+    )
+    .join("\x01");
 }
 
-let repoFilesCache: { key: string; repoFiles: RepoFile[] } | undefined
+let repoFilesCache: { key: string; repoFiles: RepoFile[] } | undefined;
 
-export function parseRepoFiles(trackedOutput: string, untrackedOutput: string, key: string): RepoFile[] {
+export function parseRepoFiles(
+  trackedOutput: string,
+  untrackedOutput: string,
+  key: string,
+): RepoFile[] {
   if (repoFilesCache?.key === key) {
-    return repoFilesCache.repoFiles
+    return repoFilesCache.repoFiles;
   }
 
-  const seen = new Set<string>()
-  const repoFiles: RepoFile[] = []
+  const seen = new Set<string>();
+  const repoFiles: RepoFile[] = [];
 
   for (const path of trackedOutput.split("\0")) {
     if (path !== "" && !seen.has(path)) {
-      seen.add(path)
-      repoFiles.push({ path, tracked: true })
+      seen.add(path);
+      repoFiles.push({ path, tracked: true });
     }
   }
 
   for (const path of untrackedOutput.split("\0")) {
     if (path !== "" && !seen.has(path)) {
-      seen.add(path)
-      repoFiles.push({ path, tracked: false })
+      seen.add(path);
+      repoFiles.push({ path, tracked: false });
     }
   }
 
-  repoFilesCache = { key, repoFiles }
-  return repoFiles
+  repoFilesCache = { key, repoFiles };
+  return repoFiles;
 }
 
 export function parseUntrackedFiles(output: string): StatusEntry[] {
   return output
     .split("\0")
     .filter((path) => path !== "")
-    .map((path) => ({ kind: "untracked", path }))
+    .map((path) => ({ kind: "untracked", path }));
 }
 
 export function parseNumstat(output: string) {
-  const tokens = output.split("\0")
-  const entries: { path: string; additions: number; deletions: number; binary: boolean }[] = []
+  const tokens = output.split("\0");
+  const entries: { path: string; additions: number; deletions: number; binary: boolean }[] = [];
 
   for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index]
+    const token = tokens[index];
     if (token === undefined || token === "") {
-      continue
+      continue;
     }
 
-    const [addedRaw = "0", deletedRaw = "0", ...pathParts] = token.split("\t")
-    let path = pathParts.join("\t")
+    const [addedRaw = "0", deletedRaw = "0", ...pathParts] = token.split("\t");
+    let path = pathParts.join("\t");
     // A rename record carries no inline path at all ("added\tdeleted\t" NUL old
     // NUL new), unlike a path that merely ends with a tab
     if (pathParts.length === 1 && pathParts[0] === "") {
-      path = tokens[index + 2] ?? ""
-      index += 2
+      path = tokens[index + 2] ?? "";
+      index += 2;
     }
 
-    const binary = addedRaw === "-" || deletedRaw === "-"
+    const binary = addedRaw === "-" || deletedRaw === "-";
     entries.push({
       additions: binary ? 0 : Number.parseInt(addedRaw, 10),
       binary,
       deletions: binary ? 0 : Number.parseInt(deletedRaw, 10),
       path,
-    })
+    });
   }
 
-  return entries
+  return entries;
 }
 
 export function parseNameStatus(output: string): StatusEntry[] {
-  const tokens = output.split("\0")
-  const entries: StatusEntry[] = []
+  const tokens = output.split("\0");
+  const entries: StatusEntry[] = [];
 
   for (let index = 0; index < tokens.length; index += 1) {
-    const status = tokens[index]
+    const status = tokens[index];
     if (status === undefined || status.trim() === "") {
-      continue
+      continue;
     }
 
-    const code = status[0]
+    const code = status[0];
 
     if (code === "R" || code === "C") {
-      const oldPath = tokens[index + 1] ?? ""
-      const path = tokens[index + 2] ?? oldPath
-      index += 2
+      const oldPath = tokens[index + 1] ?? "";
+      const path = tokens[index + 2] ?? oldPath;
+      index += 2;
       // A copy leaves the source untouched, so only the destination is a change
-      entries.push(code === "R" ? { kind: "renamed", oldPath, path } : { kind: "added", path })
-      continue
+      entries.push(code === "R" ? { kind: "renamed", oldPath, path } : { kind: "added", path });
+      continue;
     }
 
-    const path = tokens[index + 1] ?? ""
-    index += 1
+    const path = tokens[index + 1] ?? "";
+    index += 1;
 
     if (code === "A") {
-      entries.push({ kind: "added", path })
+      entries.push({ kind: "added", path });
     } else if (code === "D") {
-      entries.push({ kind: "deleted", path })
+      entries.push({ kind: "deleted", path });
     } else {
-      entries.push({ kind: "modified", path })
+      entries.push({ kind: "modified", path });
     }
   }
 
-  return entries
+  return entries;
 }
 
 function inferKind(path: string, deletions: number, additions: number): ChangeKind {
   if (deletions > 0 && additions === 0) {
-    return "deleted"
+    return "deleted";
   }
 
   if (additions > 0 && deletions === 0 && path !== "") {
-    return "added"
+    return "added";
   }
 
-  return "modified"
+  return "modified";
 }
 
 function fileMtime(repoRoot: string, path: string) {
   try {
-    return statSync(`${repoRoot}/${path}`).mtimeMs
+    return statSync(`${repoRoot}/${path}`).mtimeMs;
   } catch {
-    return 0
+    return 0;
   }
 }
 
 function warningsFor(path: string, kind: ChangeKind, additions: number, deletions: number) {
-  const warnings: string[] = []
-  const filename = path.split("/").at(-1) ?? path
+  const warnings: string[] = [];
+  const filename = path.split("/").at(-1) ?? path;
 
   if (kind === "deleted" || deletions > additions * 2) {
-    warnings.push("deletions")
+    warnings.push("deletions");
   }
 
-  if (filename === "package.json" || filename.endsWith(".lock") || filename === "bun.lockb" || filename === "bun.lock") {
-    warnings.push("deps")
+  if (
+    filename === "package.json" ||
+    filename.endsWith(".lock") ||
+    filename === "bun.lockb" ||
+    filename === "bun.lock"
+  ) {
+    warnings.push("deps");
   }
 
   if (additions + deletions > 500) {
-    warnings.push("large")
+    warnings.push("large");
   }
 
   if (kind === "untracked") {
-    warnings.push("new")
+    warnings.push("new");
   }
 
-  return warnings
+  return warnings;
 }
 
 function statUntrackedFile(repoRoot: string, path: string) {
   // LoadFileContent absorbs dangling symlinks and files deleted mid-scan as "missing"
-  const content = loadFileContent(repoRoot, path, { full: false })
+  const content = loadFileContent(repoRoot, path, { full: false });
   if (content.kind === "text") {
-    return { additions: content.lineCount, binary: false }
+    return { additions: content.lineCount, binary: false };
   }
 
-  return { additions: 0, binary: content.kind !== "missing" }
+  return { additions: 0, binary: content.kind !== "missing" };
 }

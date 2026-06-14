@@ -1,17 +1,18 @@
-import type { KeyEvent } from "@opentui/core"
-import { batch } from "solid-js"
-import { latestActivity } from "./activity"
-import { nextScope, scopeLabel } from "./cli"
-import { formatCopyReference } from "./copy-reference"
-import type { Worktree } from "./git"
-import { lineReference } from "./patch"
-import { state } from "./state"
-import { firstFileInNode } from "./tree"
-import { nextFindingPath, orderedFindingPaths } from "./ui-helpers"
+import type { KeyEvent } from "@opentui/core";
+import { batch } from "solid-js";
+
+import { latestActivity } from "./activity";
+import { nextScope, scopeLabel } from "./cli";
+import { formatCopyReference } from "./copy-reference";
+import type { Worktree } from "./git";
+import { lineReference } from "./patch";
+import { state } from "./state";
+import { firstFileInNode } from "./tree";
+import { nextFindingPath, orderedFindingPaths } from "./ui-helpers";
 
 interface KeyHandlerCtx {
-  quit: () => void
-  switchWorktree: (worktree: Worktree) => void
+  quit: () => void;
+  switchWorktree: (worktree: Worktree) => void;
 }
 
 // One handler routes every key through the modal-precedence chain
@@ -24,244 +25,247 @@ export function createKeyHandler(ctx: KeyHandlerCtx) {
     batch(() => {
       if (state.helpOpen()) {
         if (key.name === "escape" || key.name === "?" || key.name === "q") {
-          state.setHelpOpen(false)
+          state.setHelpOpen(false);
         }
-        return
+        return;
       }
 
       if (state.worktreeOpen()) {
-        const worktrees = state.worktrees()
-        const lastIndex = Math.max(0, (worktrees?.length ?? 1) - 1)
+        const worktrees = state.worktrees();
+        const lastIndex = Math.max(0, (worktrees?.length ?? 1) - 1);
         if (key.name === "escape" || key.name === "w") {
-          state.setWorktreeOpen(false)
+          state.setWorktreeOpen(false);
         } else if (key.name === "j" || key.name === "down") {
-          state.setWorktreeIndex(Math.min(state.worktreeIndex() + 1, lastIndex))
+          state.setWorktreeIndex(Math.min(state.worktreeIndex() + 1, lastIndex));
         } else if (key.name === "k" || key.name === "up") {
-          state.setWorktreeIndex(Math.max(state.worktreeIndex() - 1, 0))
+          state.setWorktreeIndex(Math.max(state.worktreeIndex() - 1, 0));
         } else if (key.name === "return") {
-          const worktree = worktrees?.[state.worktreeIndex()]
+          const worktree = worktrees?.[state.worktreeIndex()];
           if (worktree !== undefined) {
-            ctx.switchWorktree(worktree)
+            ctx.switchWorktree(worktree);
           }
         }
-        return
+        return;
       }
 
       if (state.paletteOpen()) {
         if (key.name === "escape") {
-          state.setPaletteOpen(false)
+          state.setPaletteOpen(false);
         } else if (key.name === "down" || (key.ctrl && key.name === "n")) {
-          state.setPaletteIndex(Math.min(state.paletteIndex() + 1, Math.max(0, state.paletteResults().length - 1)))
+          state.setPaletteIndex(
+            Math.min(state.paletteIndex() + 1, Math.max(0, state.paletteResults().length - 1)),
+          );
         } else if (key.name === "up" || (key.ctrl && key.name === "p")) {
-          state.setPaletteIndex(Math.max(state.paletteIndex() - 1, 0))
+          state.setPaletteIndex(Math.max(state.paletteIndex() - 1, 0));
         }
-        return
+        return;
       }
 
       if (key.ctrl && key.name === "p") {
-        state.setPaletteOpen(true)
-        state.setPaletteQuery("")
-        state.setPaletteIndex(0)
-        return
+        state.setPaletteOpen(true);
+        state.setPaletteQuery("");
+        state.setPaletteIndex(0);
+        return;
       }
 
       if (key.name === "q") {
-        ctx.quit()
-        return
+        ctx.quit();
+        return;
       }
 
       if (key.name === "escape") {
         if (state.problemsOpen()) {
-          state.setProblemsOpen(false)
+          state.setProblemsOpen(false);
           if (state.focusedPane() === "problems") {
-            state.setFocusedPane("tree")
+            state.setFocusedPane("tree");
           }
         } else {
-          ctx.quit()
+          ctx.quit();
         }
-        return
+        return;
       }
 
       if (key.name === "tab") {
-        state.setFocusedPane(state.focusedPane() === "diff" ? "tree" : "diff")
-        return
+        state.setFocusedPane(state.focusedPane() === "diff" ? "tree" : "diff");
+        return;
       }
 
       if (key.name === "p") {
-        const open = state.problemsOpen()
-        state.setFocusedPane(open ? "tree" : "problems")
-        state.setProblemsOpen(!open)
-        return
+        const open = state.problemsOpen();
+        state.setFocusedPane(open ? "tree" : "problems");
+        state.setProblemsOpen(!open);
+        return;
       }
 
       if (key.name === "b") {
-        const open = state.sidebarOpen()
+        const open = state.sidebarOpen();
         if (open && state.focusedPane() === "tree") {
-          state.setFocusedPane("diff")
+          state.setFocusedPane("diff");
         }
-        state.setSidebarOpen(!open)
-        return
+        state.setSidebarOpen(!open);
+        return;
       }
 
       if (key.name === "?") {
-        state.setHelpOpen(true)
-        return
+        state.setHelpOpen(true);
+        return;
       }
 
       if (key.name === "w") {
-        state.setWorktreeOpen(true)
-        state.setWorktreeIndex(0)
-        state.setWorktrees(undefined)
-        state.loadWorktrees(state.gitModel().repoRoot)
-        return
+        state.setWorktreeOpen(true);
+        state.setWorktreeIndex(0);
+        state.setWorktrees(undefined);
+        state.loadWorktrees(state.gitModel().repoRoot);
+        return;
       }
 
       if (key.name === "s") {
-        const current = state.scope()
-        const next = { ...current, kind: nextScope(current.kind) }
-        state.setScope(next)
-        state.setStatus(`scope: ${scopeLabel(next)}`)
-        return
+        const current = state.scope();
+        const next = { ...current, kind: nextScope(current.kind) };
+        state.setScope(next);
+        state.setStatus(`scope: ${scopeLabel(next)}`);
+        return;
       }
 
       if (key.name === "c") {
-        const current = state.changesOnly()
-        state.setChangesOnly(!current)
-        state.setStatus(current ? "showing all files" : "showing changes only")
-        return
+        const current = state.changesOnly();
+        state.setChangesOnly(!current);
+        state.setStatus(current ? "showing all files" : "showing changes only");
+        return;
       }
 
       if (key.name === ".") {
-        const latest = latestActivity(state.activityLog())
+        const latest = latestActivity(state.activityLog());
         if (latest !== undefined) {
-          state.selectFile(latest.path)
+          state.selectFile(latest.path);
         }
-        return
+        return;
       }
 
-      const selectedPath = state.selectedPath()
+      const selectedPath = state.selectedPath();
 
       if (key.name === "v" && state.selectedFile() !== undefined && selectedPath !== undefined) {
-        const line = state.navigableLines()[state.cursorIndex()]
-        const lineNumber = line?.newLine ?? line?.oldLine
+        const line = state.navigableLines()[state.cursorIndex()];
+        const lineNumber = line?.newLine ?? line?.oldLine;
         if (lineNumber !== undefined) {
-          state.setJumpTarget({ escalate: false, line: lineNumber, path: selectedPath })
+          state.setJumpTarget({ escalate: false, line: lineNumber, path: selectedPath });
         }
-        state.setFileView(!state.fileView())
-        return
+        state.setFileView(!state.fileView());
+        return;
       }
 
       if (key.name === "n") {
-        const next = nextFindingPath(orderedFindingPaths(state.problems()), selectedPath)
+        const next = nextFindingPath(orderedFindingPaths(state.problems()), selectedPath);
         if (next !== undefined) {
-          state.selectFile(next)
+          state.selectFile(next);
         }
-        return
+        return;
       }
 
       if (key.name === "r") {
-        void state.runChecks(state.gitModel())
-        return
+        void state.runChecks(state.gitModel());
+        return;
       }
 
       if (key.name === "f" && selectedPath !== undefined) {
-        state.setFullContentPaths(new Set(state.fullContentPaths()).add(selectedPath))
-        state.setStatus(`loaded full content for ${selectedPath}`)
-        return
+        state.setFullContentPaths(new Set(state.fullContentPaths()).add(selectedPath));
+        state.setStatus(`loaded full content for ${selectedPath}`);
+        return;
       }
 
       if (key.name === "y" && selectedPath !== undefined) {
-        const line = state.navigableLines()[state.cursorIndex()]
-        const reference = line === undefined ? { path: selectedPath } : lineReference(selectedPath, line)
-        state.copy(formatCopyReference(reference))
-        return
+        const line = state.navigableLines()[state.cursorIndex()];
+        const reference =
+          line === undefined ? { path: selectedPath } : lineReference(selectedPath, line);
+        state.copy(formatCopyReference(reference));
+        return;
       }
 
-      const focusedPane = state.focusedPane()
+      const focusedPane = state.focusedPane();
 
       if (focusedPane === "problems") {
-        const items = state.allProblemItems()
+        const items = state.allProblemItems();
         if (key.name === "j" || key.name === "down") {
-          state.setProblemIndex(Math.min(state.problemIndex() + 1, Math.max(0, items.length - 1)))
+          state.setProblemIndex(Math.min(state.problemIndex() + 1, Math.max(0, items.length - 1)));
         } else if (key.name === "k" || key.name === "up") {
-          state.setProblemIndex(Math.max(state.problemIndex() - 1, 0))
+          state.setProblemIndex(Math.max(state.problemIndex() - 1, 0));
         } else if (key.name === "return") {
-          const item = items[state.problemIndex()]
+          const item = items[state.problemIndex()];
           if (item?.kind === "problem") {
-            const { problem } = item
-            state.selectFile(problem.path)
+            const { problem } = item;
+            state.selectFile(problem.path);
             if (problem.line !== undefined) {
-              state.setJumpTarget({ escalate: true, line: problem.line, path: problem.path })
+              state.setJumpTarget({ escalate: true, line: problem.line, path: problem.path });
             }
-            state.setFocusedPane("diff")
+            state.setFocusedPane("diff");
           }
         }
-        return
+        return;
       }
 
       if (focusedPane === "diff") {
-        const last = state.navigableLines().length - 1
-        const halfPage = Math.max(1, Math.floor(state.viewerHeight() / 2))
+        const last = state.navigableLines().length - 1;
+        const halfPage = Math.max(1, Math.floor(state.viewerHeight() / 2));
         if (key.name === "j" || key.name === "down") {
-          state.setCursorIndex(Math.max(0, Math.min(state.cursorIndex() + 1, last)))
+          state.setCursorIndex(Math.max(0, Math.min(state.cursorIndex() + 1, last)));
         } else if (key.name === "k" || key.name === "up") {
-          state.setCursorIndex(Math.max(state.cursorIndex() - 1, 0))
+          state.setCursorIndex(Math.max(state.cursorIndex() - 1, 0));
         } else if (key.ctrl && key.name === "d") {
-          state.setCursorIndex(Math.max(0, Math.min(state.cursorIndex() + halfPage, last)))
+          state.setCursorIndex(Math.max(0, Math.min(state.cursorIndex() + halfPage, last)));
         } else if (key.ctrl && key.name === "u") {
-          state.setCursorIndex(Math.max(state.cursorIndex() - halfPage, 0))
+          state.setCursorIndex(Math.max(state.cursorIndex() - halfPage, 0));
         } else if (key.name === "g" && !key.shift) {
-          state.setCursorIndex(0)
+          state.setCursorIndex(0);
         } else if (key.name === "g" || key.name === "G") {
-          state.setCursorIndex(Math.max(0, last))
+          state.setCursorIndex(Math.max(0, last));
         } else if (key.name === "h" || key.name === "left") {
-          state.setFocusedPane("tree")
+          state.setFocusedPane("tree");
         }
-        return
+        return;
       }
 
       if (key.name === "j" || key.name === "down") {
-        state.moveFocus(1)
-        return
+        state.moveFocus(1);
+        return;
       }
 
       if (key.name === "k" || key.name === "up") {
-        state.moveFocus(-1)
-        return
+        state.moveFocus(-1);
+        return;
       }
 
-      const treeRows = state.treeRows()
-      const focusedRowIndex = state.focusedRowIndex()
+      const treeRows = state.treeRows();
+      const focusedRowIndex = state.focusedRowIndex();
 
       if (key.name === "l" || key.name === "right") {
-        const row = treeRows[focusedRowIndex]
+        const row = treeRows[focusedRowIndex];
         if (row?.node.type === "directory") {
-          state.setExpandedDirectories(new Set(state.expandedDirectories()).add(row.node.id))
+          state.setExpandedDirectories(new Set(state.expandedDirectories()).add(row.node.id));
         } else if (row?.node.type === "file") {
-          state.selectFile(row.node.path)
+          state.selectFile(row.node.path);
         }
-        return
+        return;
       }
 
       if (key.name === "h" || key.name === "left") {
-        const row = treeRows[focusedRowIndex]
+        const row = treeRows[focusedRowIndex];
         if (row?.node.type === "directory") {
-          const next = new Set(state.expandedDirectories())
-          next.delete(row.node.id)
-          state.setExpandedDirectories(next)
+          const next = new Set(state.expandedDirectories());
+          next.delete(row.node.id);
+          state.setExpandedDirectories(next);
         }
-        return
+        return;
       }
 
       if (key.name === "return") {
-        const row = treeRows[focusedRowIndex]
+        const row = treeRows[focusedRowIndex];
         if (row !== undefined) {
-          const file = firstFileInNode(row.node)
+          const file = firstFileInNode(row.node);
           if (file !== undefined) {
-            state.selectFile(file.path)
+            state.selectFile(file.path);
           }
         }
       }
-    })
-  }
+    });
+  };
 }

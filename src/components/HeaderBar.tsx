@@ -1,11 +1,12 @@
-import { basename } from "node:path"
-import packageJson from "../../package.json"
-import { scopeLabel } from "../cli"
-import { state } from "../state"
-import { useTheme } from "../theme/context"
+import { basename } from "node:path";
+
+import packageJson from "../../package.json";
+import { scopeLabel } from "../cli";
+import { state } from "../state";
+import { useTheme } from "../theme/context";
 
 export function HeaderBar() {
-  const theme = useTheme()
+  const theme = useTheme();
   return (
     <box
       height={1}
@@ -20,9 +21,10 @@ export function HeaderBar() {
         <text fg={theme.colors.text.faint}>@{packageJson.version}</text>
       </box>
       <text fg={theme.colors.text.secondary}>
-        {basename(state.gitModel().repoRoot)} · {scopeLabel(state.scope())} · {state.gitModel().changed.length} changed
+        {basename(state.gitModel().repoRoot)} · {scopeLabel(state.scope())} ·{" "}
+        {state.gitModel().changed.length} changed
         {state.countsText() === "" ? "" : ` · ${state.countsText()}`}
       </text>
     </box>
-  )
+  );
 }

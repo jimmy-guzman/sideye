@@ -1,8 +1,8 @@
-import { state } from "../state"
-import { useTheme } from "../theme/context"
+import { state } from "../state";
+import { useTheme } from "../theme/context";
 
 export function StatusBar() {
-  const theme = useTheme()
+  const theme = useTheme();
   return (
     <box
       height={1}
@@ -15,5 +15,5 @@ export function StatusBar() {
       <text fg={theme.colors.text.muted}>? keys · q quit</text>
       <text fg={theme.colors.text.secondary}>{state.statusRight()}</text>
     </box>
-  )
+  );
 }

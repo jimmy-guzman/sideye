@@ -1,6 +1,7 @@
-import { For } from "solid-js"
-import { state } from "../state"
-import { useTheme } from "../theme/context"
+import { For } from "solid-js";
+
+import { state } from "../state";
+import { useTheme } from "../theme/context";
 
 // Mirrors the Keys table in README.md
 const KEY_HELP: [combo: string, action: string][] = [
@@ -24,10 +25,10 @@ const KEY_HELP: [combo: string, action: string][] = [
   ["g / G", "jump to first / last line"],
   ["?", "show all keybindings"],
   ["q / esc", "quit (esc closes panels first)"],
-]
+];
 
 export function HelpOverlay() {
-  const theme = useTheme()
+  const theme = useTheme();
   return (
     <box
       position="absolute"
@@ -43,7 +44,12 @@ export function HelpOverlay() {
       <box height={1} paddingLeft={1} backgroundColor={theme.colors.surface.panel}>
         <text fg={theme.colors.accent.primary}>keys</text>
       </box>
-      <scrollbox width="100%" height={Math.min(KEY_HELP.length, Math.max(1, state.terminalHeight() - 6))} scrollY viewportCulling>
+      <scrollbox
+        width="100%"
+        height={Math.min(KEY_HELP.length, Math.max(1, state.terminalHeight() - 6))}
+        scrollY
+        viewportCulling
+      >
         <For each={KEY_HELP}>
           {([combo, action]) => (
             <box
@@ -61,5 +67,5 @@ export function HelpOverlay() {
         </For>
       </scrollbox>
     </box>
-  )
+  );
 }
