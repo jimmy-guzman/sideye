@@ -34,6 +34,12 @@ export function Sidebar() {
         height={state.paneHeight()}
         scrollY
         viewportCulling
+        scrollbarOptions={{
+          trackOptions: {
+            backgroundColor: theme.colors.scrollbar.track,
+            foregroundColor: theme.colors.scrollbar.thumb,
+          },
+        }}
       >
         <For each={state.treeRows()}>{(row) => <TreeRow row={row} />}</For>
         <Show when={state.treeRows().length < state.paneHeight()}>

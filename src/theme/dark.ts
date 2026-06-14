@@ -22,6 +22,7 @@ export const darkTheme: Theme = {
     renamed: "#c084fc",
     untracked: "#3ddc84",
   },
+  scrollbar: { thumb: "#3f3f46", track: "#09090b" },
   severity: {
     error: "#ff5c8a",
     errorGutterBg: "#52141f",

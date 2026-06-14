@@ -33,6 +33,12 @@ export function ProblemsPanel() {
         height={PROBLEMS_HEIGHT - 2}
         scrollY
         viewportCulling
+        scrollbarOptions={{
+          trackOptions: {
+            backgroundColor: theme.colors.scrollbar.track,
+            foregroundColor: theme.colors.scrollbar.thumb,
+          },
+        }}
       >
         <Show
           when={state.allProblemItems().length > 0}

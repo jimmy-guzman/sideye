@@ -19,6 +19,7 @@ export interface Theme {
     removedSign: string;
   };
   kind: Record<ChangeKind, string>;
+  scrollbar: { thumb: string; track: string };
   severity: { error: string; errorGutterBg: string; warning: string; warningGutterBg: string };
   stage: Record<StageState, string>;
   success: string;

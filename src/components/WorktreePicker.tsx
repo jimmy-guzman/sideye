@@ -37,6 +37,12 @@ export function WorktreePicker() {
         height={Math.min(12, Math.max(1, state.worktrees()?.length ?? 1))}
         scrollY
         viewportCulling
+        scrollbarOptions={{
+          trackOptions: {
+            backgroundColor: theme.colors.scrollbar.track,
+            foregroundColor: theme.colors.scrollbar.thumb,
+          },
+        }}
       >
         <Show
           when={state.worktrees() !== undefined}

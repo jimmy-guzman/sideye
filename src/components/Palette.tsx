@@ -58,6 +58,12 @@ export function Palette() {
         height={Math.min(12, Math.max(1, state.paletteResults().length))}
         scrollY
         viewportCulling
+        scrollbarOptions={{
+          trackOptions: {
+            backgroundColor: theme.colors.scrollbar.track,
+            foregroundColor: theme.colors.scrollbar.thumb,
+          },
+        }}
       >
         <Show
           when={state.paletteResults().length > 0}
