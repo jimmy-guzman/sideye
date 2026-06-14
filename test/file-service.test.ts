@@ -2,21 +2,7 @@ import { expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { Effect } from "effect";
-
-import { File, FileLive } from "../src/services/file";
-import { ProcessLive } from "../src/services/process";
-import { createFixtureRepo, runGit } from "./helpers";
-
-function loadGitShow(repo: string, path: string) {
-  return Effect.runPromise(
-    File.pipe(
-      Effect.flatMap((file) => file.content(repo, path, { full: false, gitSpec: `HEAD:${path}` })),
-      Effect.provide(FileLive),
-      Effect.provide(ProcessLive),
-    ),
-  );
-}
+import { createFixtureRepo, loadGitShowContent, runGit } from "./helpers";
 
 test("File.content classifies a deleted binary file from git-show as binary", async () => {
   const repo = createFixtureRepo("file-service-binary-", { "keep.txt": "x\n" });
@@ -26,7 +12,7 @@ test("File.content classifies a deleted binary file from git-show as binary", as
     runGit(repo, ["commit", "-m", "add binary"]);
     runGit(repo, ["rm", "logo.bin"]);
 
-    expect(await loadGitShow(repo, "logo.bin")).toEqual({ kind: "binary" });
+    expect(await loadGitShowContent(repo, "logo.bin")).toEqual({ kind: "binary" });
   } finally {
     rmSync(repo, { force: true, recursive: true });
   }
@@ -37,7 +23,7 @@ test("File.content decodes a deleted text file from git-show", async () => {
   try {
     runGit(repo, ["rm", "note.txt"]);
 
-    expect(await loadGitShow(repo, "note.txt")).toEqual({
+    expect(await loadGitShowContent(repo, "note.txt")).toEqual({
       content: "hello\nworld",
       kind: "text",
       lineCount: 2,
