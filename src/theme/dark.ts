@@ -85,6 +85,8 @@ export const darkTheme: Theme = {
     "string.escape": { fg: "#f5a3d7" },
     "string.regexp": { fg: "#f5a3d7" },
     "string.special.key": { fg: "#93c5fd" },
+    "tag": { fg: "#fda4af" },
+    "tag.attribute": { fg: "#f0abfc", italic: true },
     "type": { fg: "#f0abfc" },
     "type.builtin": { bold: true, fg: "#f0abfc" },
     "variable": { fg: "#e4e4e7" },

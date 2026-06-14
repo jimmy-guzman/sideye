@@ -152,6 +152,30 @@ describe("syntax highlighting in diffs", () => {
     expect(fgOf("toBe")).toBe("#67e8f9");
   });
 
+  test("tsx diffs style JSX element and attribute names", async () => {
+    const fgOf = await renderDiffSpans(
+      "src/Panel.tsx",
+      [
+        "export function Panel() {",
+        "  return (",
+        '    <box flexDirection="row">',
+        "      <Sidebar />",
+        "      <text>{label}</text>",
+        "    </box>",
+        "  )",
+        "}",
+      ],
+      "box",
+      "#fda4af",
+    );
+
+    expect(fgOf("box")).toBe("#fda4af");
+    expect(fgOf("text")).toBe("#fda4af");
+    expect(fgOf("Sidebar")).toBe("#fda4af");
+    expect(fgOf("flexDirection")).toBe("#f0abfc");
+    expect(fgOf('"row"')).toBe("#86efac");
+  });
+
   test("json diffs style keys distinctly from string values", async () => {
     const fgOf = await renderDiffSpans(
       "package.json",
