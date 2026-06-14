@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.7](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.1.6...sideye-v0.1.7) (2026-06-14)
+
+
+### Features
+
+* **ui:** ✨ mute scrollbars to theme colors ([#39](https://github.com/jimmy-guzman/sideye/issues/39)) ([2601e12](https://github.com/jimmy-guzman/sideye/commit/2601e1237445639a6b91aa0928321a30f787952b))
+
+
+### Bug Fixes
+
+* **file:** 🐛 classify deleted binaries on the git-show path ([#36](https://github.com/jimmy-guzman/sideye/issues/36)) ([74db41a](https://github.com/jimmy-guzman/sideye/commit/74db41a4ff144c99548c0914fc895205bfea5a87))
+* **syntax:** 🐛 highlight JSX with the tsx grammar ([#38](https://github.com/jimmy-guzman/sideye/issues/38)) ([d3b3555](https://github.com/jimmy-guzman/sideye/commit/d3b355504e8eb0d7cf8b04535b7a07aad2841d6d))
+* **ui:** 🐛 stop the tree-navigation freeze w/ solidjs ([#33](https://github.com/jimmy-guzman/sideye/issues/33)) ([4a5c7c4](https://github.com/jimmy-guzman/sideye/commit/4a5c7c40a9f97eec251635dc27b78f9215fd6b6b))
+
 ## [0.1.6](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.1.5...sideye-v0.1.6) (2026-06-12)
 
 
