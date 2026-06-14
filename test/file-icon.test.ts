@@ -10,9 +10,9 @@ describe("fileIcon", () => {
   });
 
   test("prefers an exact filename over its extension", () => {
-    // Package.json is a json file, but the stem entry takes priority.
+    // Package.json is a json file, but the stem entry beats the .json extension glyph.
     expect(fileIcon("package.json")).toBe("\u{e718}");
-    expect(fileIcon("package.json")).not.toBe(fileIcon("tsconfig.json"));
+    expect(fileIcon("package.json")).not.toBe(fileIcon("generic.json"));
   });
 
   test("matches dotfiles by full name", () => {

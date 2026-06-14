@@ -8,7 +8,7 @@
  * (suffix), and an unmatched file falls back to the generic file glyph.
  *
  * The glyph name behind each code (for future edits): file = cod-file, folder(_open) =
- * fa-folder(_open), and per entry below — ts dev-typescript, tsx/jsx dev-react, js dev-javascript,
+ * fa-folder(_open), and per entry below: ts dev-typescript, tsx/jsx dev-react, js dev-javascript,
  * json cod-json, md dev-markdown, css dev-css3, html dev-html5, rs dev-rust, py dev-python, go
  * dev-go, sh cod-terminal_bash, toml custom-toml, yaml dev-yaml, lock fa-lock, image
  * fa-file_image_o, node dev-nodejs_small, tsconfig seti-tsconfig, bun dev-bun, docker dev-docker,
