@@ -1,32 +1,36 @@
-import { Context, Data, Effect, Layer } from "effect"
+import { Context, Data, Effect, Layer } from "effect";
 
 export interface CommandResult {
-  exitCode: number
-  stdout: string
-  stderr: string
+  exitCode: number;
+  stdout: string;
+  stderr: string;
 }
 
 export class CommandError extends Data.TaggedError("CommandError")<{
-  readonly command: readonly string[]
-  readonly exitCode: number
-  readonly stdout: string
-  readonly stderr: string
-  readonly message: string
+  readonly command: readonly string[];
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly message: string;
 }> {}
 
 interface RunOptions {
-  allowedExitCodes?: readonly number[]
-  stdin?: string
+  allowedExitCodes?: readonly number[];
+  stdin?: string;
 }
 
 function renderCommand(command: readonly string[]) {
-  return command.map((part) => (part.includes(" ") ? JSON.stringify(part) : part)).join(" ")
+  return command.map((part) => (part.includes(" ") ? JSON.stringify(part) : part)).join(" ");
 }
 
 export class Process extends Context.Service<
   Process,
   {
-    readonly run: (command: readonly string[], cwd: string, options?: RunOptions) => Effect.Effect<CommandResult, CommandError>
+    readonly run: (
+      command: readonly string[],
+      cwd: string,
+      options?: RunOptions,
+    ) => Effect.Effect<CommandResult, CommandError>;
   }
 >()("sideye/Process") {}
 
@@ -67,16 +71,20 @@ export const ProcessLive = Layer.succeed(Process)({
               stdout: "",
             }),
           try: (signal) => {
-            signal.addEventListener("abort", () => child.kill(), { once: true })
-            return Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
+            signal.addEventListener("abort", () => child.kill(), { once: true });
+            return Promise.all([
+              new Response(child.stdout).text(),
+              new Response(child.stderr).text(),
+              child.exited,
+            ]);
           },
         }).pipe(
           Effect.flatMap(([stdout, stderr, exitCode]) => {
             if ((options?.allowedExitCodes ?? [0]).includes(exitCode)) {
-              return Effect.succeed({ exitCode, stderr, stdout })
+              return Effect.succeed({ exitCode, stderr, stdout });
             }
 
-            const detail = stderr.trim() || stdout.trim()
+            const detail = stderr.trim() || stdout.trim();
             return Effect.fail(
               new CommandError({
                 command,
@@ -85,14 +93,14 @@ export const ProcessLive = Layer.succeed(Process)({
                 stderr,
                 stdout,
               }),
-            )
+            );
           }),
         ),
       (child) =>
         Effect.sync(() => {
           if (!child.killed) {
-            child.kill()
+            child.kill();
           }
         }),
     ),
-})
+});

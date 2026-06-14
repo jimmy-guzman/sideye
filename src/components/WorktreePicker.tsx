@@ -1,18 +1,19 @@
-import type { ScrollBoxRenderable } from "@opentui/core"
-import { createEffect, Index, Show } from "solid-js"
-import { state } from "../state"
-import { useTheme } from "../theme/context"
-import { collapseHome, truncateLeft, worktreeLabel } from "../ui-helpers"
+import type { ScrollBoxRenderable } from "@opentui/core";
+import { createEffect, Index, Show } from "solid-js";
+
+import { state } from "../state";
+import { useTheme } from "../theme/context";
+import { collapseHome, truncateLeft, worktreeLabel } from "../ui-helpers";
 
 export function WorktreePicker() {
-  const theme = useTheme()
-  let worktreeRef: ScrollBoxRenderable | undefined
+  const theme = useTheme();
+  let worktreeRef: ScrollBoxRenderable | undefined;
 
   createEffect(() => {
-    worktreeRef?.scrollChildIntoView(`worktree-${state.worktreeIndex()}`)
-  })
+    worktreeRef?.scrollChildIntoView(`worktree-${state.worktreeIndex()}`);
+  });
 
-  const repoRoot = () => state.gitModel().repoRoot
+  const repoRoot = () => state.gitModel().repoRoot;
 
   return (
     <box
@@ -55,15 +56,17 @@ export function WorktreePicker() {
             {/* Id-by-index is required: reordering must never change a live renderable's id */}
             <Index each={state.worktrees()}>
               {(worktree, index) => {
-                const current = () => worktree().path === repoRoot()
+                const current = () => worktree().path === repoRoot();
                 const badges = () =>
-                  [worktree().locked ? "locked" : "", worktree().prunable ? "prunable" : ""].filter((badge) => badge !== "").join(" ")
+                  [worktree().locked ? "locked" : "", worktree().prunable ? "prunable" : ""]
+                    .filter((badge) => badge !== "")
+                    .join(" ");
                 const nameFg = () =>
                   index === state.worktreeIndex()
                     ? theme.colors.text.selected
                     : current()
                       ? theme.colors.accent.primary
-                      : theme.colors.text.strong
+                      : theme.colors.text.strong;
                 return (
                   <box
                     id={`worktree-${index}`}
@@ -72,25 +75,36 @@ export function WorktreePicker() {
                     justifyContent="space-between"
                     paddingLeft={1}
                     paddingRight={1}
-                    backgroundColor={index === state.worktreeIndex() ? theme.colors.surface.cursor : theme.colors.surface.panel}
+                    backgroundColor={
+                      index === state.worktreeIndex()
+                        ? theme.colors.surface.cursor
+                        : theme.colors.surface.panel
+                    }
                   >
-                    <text fg={nameFg()}>{`${current() ? "● " : "  "}${worktreeLabel(worktree())}`}</text>
+                    <text
+                      fg={nameFg()}
+                    >{`${current() ? "● " : "  "}${worktreeLabel(worktree())}`}</text>
                     <box flexDirection="row">
-                      {badges() === "" ? null : <text fg={theme.colors.severity.warning}>{`${badges()} `}</text>}
+                      {badges() === "" ? null : (
+                        <text fg={theme.colors.severity.warning}>{`${badges()} `}</text>
+                      )}
                       <text fg={theme.colors.text.muted}>
                         {truncateLeft(
                           collapseHome(worktree().path),
-                          Math.max(10, state.paletteWidth() - worktreeLabel(worktree()).length - 16),
+                          Math.max(
+                            10,
+                            state.paletteWidth() - worktreeLabel(worktree()).length - 16,
+                          ),
                         )}
                       </text>
                     </box>
                   </box>
-                )
+                );
               }}
             </Index>
           </Show>
         </Show>
       </scrollbox>
     </box>
-  )
+  );
 }

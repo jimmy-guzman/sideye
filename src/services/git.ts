@@ -1,5 +1,6 @@
-import { Context, Effect, Layer, Schedule } from "effect"
-import type { DiffScope } from "../cli"
+import { Context, Effect, Layer, Schedule } from "effect";
+
+import type { DiffScope } from "../cli";
 import {
   assembleChanged,
   assembleModel,
@@ -11,21 +12,23 @@ import {
   type ChangedFile,
   type GitModel,
   type Worktree,
-} from "../git"
-import { GitError } from "./errors"
-import { Process, type CommandError } from "./process"
+} from "../git";
+import { GitError } from "./errors";
+import { Process, type CommandError } from "./process";
 
 function toGitError(error: CommandError) {
-  return new GitError({ message: error.message })
+  return new GitError({ message: error.message });
 }
 
 function isTransientGit(error: CommandError) {
   // An index.lock (an agent mid-commit) clears on a quick retry
-  return /index\.lock|unable to create/i.test(error.stderr)
+  return /index\.lock|unable to create/i.test(error.stderr);
 }
 
 function retryTransient<A>(effect: Effect.Effect<A, CommandError>) {
-  return effect.pipe(Effect.retry({ schedule: Schedule.spaced("50 millis"), times: 2, while: isTransientGit }))
+  return effect.pipe(
+    Effect.retry({ schedule: Schedule.spaced("50 millis"), times: 2, while: isTransientGit }),
+  );
 }
 
 export class Git extends Context.Service<
@@ -34,18 +37,24 @@ export class Git extends Context.Service<
     readonly changedFiles: (
       repoRoot: string,
       scope: DiffScope,
-    ) => Effect.Effect<Pick<GitModel, "changed" | "changedByPath" | "scopeKey">, GitError>
-    readonly fileDiff: (repoRoot: string, scope: DiffScope, file: ChangedFile) => Effect.Effect<string, GitError>
-    readonly loadModel: (repoRoot: string, scope: DiffScope) => Effect.Effect<GitModel, GitError>
-    readonly repoFiles: (repoRoot: string) => Effect.Effect<Pick<GitModel, "repoFiles" | "repoFilesKey">, GitError>
-    readonly worktrees: (repoRoot: string) => Effect.Effect<Worktree[], GitError>
+    ) => Effect.Effect<Pick<GitModel, "changed" | "changedByPath" | "scopeKey">, GitError>;
+    readonly fileDiff: (
+      repoRoot: string,
+      scope: DiffScope,
+      file: ChangedFile,
+    ) => Effect.Effect<string, GitError>;
+    readonly loadModel: (repoRoot: string, scope: DiffScope) => Effect.Effect<GitModel, GitError>;
+    readonly repoFiles: (
+      repoRoot: string,
+    ) => Effect.Effect<Pick<GitModel, "repoFiles" | "repoFilesKey">, GitError>;
+    readonly worktrees: (repoRoot: string) => Effect.Effect<Worktree[], GitError>;
   }
 >()("sideye/Git") {}
 
 export const GitLive = Layer.effect(
   Git,
   Effect.gen(function* gitLive() {
-    const process = yield* Process
+    const process = yield* Process;
 
     return {
       changedFiles: (repoRoot, scope) =>
@@ -60,16 +69,33 @@ export const GitLive = Layer.effect(
         ).pipe(
           retryTransient,
           Effect.map(([untracked, nameStatus, numstat, porcelain]) =>
-            assembleChanged(repoRoot, scope, untracked.stdout, nameStatus.stdout, numstat.stdout, porcelain.stdout),
+            assembleChanged(
+              repoRoot,
+              scope,
+              untracked.stdout,
+              nameStatus.stdout,
+              numstat.stdout,
+              porcelain.stdout,
+            ),
           ),
           Effect.mapError(toGitError),
         ),
       fileDiff: (repoRoot, scope, file) =>
         (file.kind === "untracked"
-          ? process.run(["git", "diff", "--no-index", "--", "/dev/null", file.path], repoRoot, { allowedExitCodes: [0, 1] })
-          : process.run([...diffArgs(scope), "--", ...(file.oldPath === undefined ? [file.path] : [file.oldPath, file.path])], repoRoot, {
+          ? process.run(["git", "diff", "--no-index", "--", "/dev/null", file.path], repoRoot, {
               allowedExitCodes: [0, 1],
             })
+          : process.run(
+              [
+                ...diffArgs(scope),
+                "--",
+                ...(file.oldPath === undefined ? [file.path] : [file.oldPath, file.path]),
+              ],
+              repoRoot,
+              {
+                allowedExitCodes: [0, 1],
+              },
+            )
         ).pipe(
           Effect.map((result) => result.stdout),
           Effect.mapError(toGitError),
@@ -87,7 +113,15 @@ export const GitLive = Layer.effect(
         ).pipe(
           retryTransient,
           Effect.map(([tracked, untracked, nameStatus, numstat, porcelain]) =>
-            assembleModel(repoRoot, scope, tracked.stdout, untracked.stdout, nameStatus.stdout, numstat.stdout, porcelain.stdout),
+            assembleModel(
+              repoRoot,
+              scope,
+              tracked.stdout,
+              untracked.stdout,
+              nameStatus.stdout,
+              numstat.stdout,
+              porcelain.stdout,
+            ),
           ),
           Effect.mapError(toGitError),
         ),
@@ -101,8 +135,11 @@ export const GitLive = Layer.effect(
         ).pipe(
           retryTransient,
           Effect.map(([tracked, untracked]) => {
-            const repoFilesKey = `${tracked.stdout}\x01${untracked.stdout}`
-            return { repoFiles: parseRepoFiles(tracked.stdout, untracked.stdout, repoFilesKey), repoFilesKey }
+            const repoFilesKey = `${tracked.stdout}\x01${untracked.stdout}`;
+            return {
+              repoFiles: parseRepoFiles(tracked.stdout, untracked.stdout, repoFilesKey),
+              repoFilesKey,
+            };
           }),
           Effect.mapError(toGitError),
         ),
@@ -112,6 +149,6 @@ export const GitLive = Layer.effect(
           Effect.map((result) => parseWorktreeList(result.stdout)),
           Effect.mapError(toGitError),
         ),
-    }
+    };
   }),
-)
+);

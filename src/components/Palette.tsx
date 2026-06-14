@@ -1,31 +1,32 @@
-import type { ScrollBoxRenderable } from "@opentui/core"
-import { createEffect, Index, Show } from "solid-js"
-import { recencyLevel } from "../activity"
-import { state } from "../state"
-import { useTheme } from "../theme/context"
-import { kindLetter } from "../ui-helpers"
-import { RecencyDot } from "./TreeRow"
+import type { ScrollBoxRenderable } from "@opentui/core";
+import { createEffect, Index, Show } from "solid-js";
+
+import { recencyLevel } from "../activity";
+import { state } from "../state";
+import { useTheme } from "../theme/context";
+import { kindLetter } from "../ui-helpers";
+import { RecencyDot } from "./TreeRow";
 
 export function Palette() {
-  const theme = useTheme()
-  let paletteRef: ScrollBoxRenderable | undefined
+  const theme = useTheme();
+  let paletteRef: ScrollBoxRenderable | undefined;
 
   createEffect(() => {
-    paletteRef?.scrollChildIntoView(`palette-${state.paletteIndex()}`)
-  })
+    paletteRef?.scrollChildIntoView(`palette-${state.paletteIndex()}`);
+  });
 
   function onSubmit() {
-    const path = state.paletteResults()[state.paletteIndex()]
+    const path = state.paletteResults()[state.paletteIndex()];
     if (path !== undefined) {
-      state.selectFile(path)
-      state.setFocusedPane("diff")
+      state.selectFile(path);
+      state.setFocusedPane("diff");
     }
-    state.setPaletteOpen(false)
+    state.setPaletteOpen(false);
   }
 
   function onInput(value: string) {
-    state.setPaletteQuery(value)
-    state.setPaletteIndex(0)
+    state.setPaletteQuery(value);
+    state.setPaletteIndex(0);
   }
 
   return (
@@ -69,14 +70,14 @@ export function Palette() {
           {/* Id-by-index is required: reordering results must never change a live renderable's id */}
           <Index each={state.paletteResults()}>
             {(path, index) => {
-              const changed = () => state.gitModel().changedByPath.get(path())
-              const recency = () => recencyLevel(state.recencyByPath().get(path()), state.now())
+              const changed = () => state.gitModel().changedByPath.get(path());
+              const recency = () => recencyLevel(state.recencyByPath().get(path()), state.now());
               const nameFg = () =>
                 index === state.paletteIndex()
                   ? theme.colors.text.selected
                   : changed() === undefined
                     ? theme.colors.text.secondary
-                    : theme.colors.kind[changed()!.kind]
+                    : theme.colors.kind[changed()!.kind];
               return (
                 <box
                   id={`palette-${index}`}
@@ -85,19 +86,27 @@ export function Palette() {
                   justifyContent="space-between"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={index === state.paletteIndex() ? theme.colors.surface.cursor : theme.colors.surface.panel}
+                  backgroundColor={
+                    index === state.paletteIndex()
+                      ? theme.colors.surface.cursor
+                      : theme.colors.surface.panel
+                  }
                 >
                   <box flexDirection="row">
                     <text fg={nameFg()}>{path()}</text>
                     <RecencyDot level={recency()} />
                   </box>
-                  {changed() === undefined ? null : <text fg={theme.colors.stage[changed()!.stage]}>{kindLetter(changed()!.kind)}</text>}
+                  {changed() === undefined ? null : (
+                    <text fg={theme.colors.stage[changed()!.stage]}>
+                      {kindLetter(changed()!.kind)}
+                    </text>
+                  )}
                 </box>
-              )
+              );
             }}
           </Index>
         </Show>
       </scrollbox>
     </box>
-  )
+  );
 }

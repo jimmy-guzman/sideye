@@ -1,83 +1,83 @@
-export type ScopeKind = "all" | "staged" | "unstaged"
+export type ScopeKind = "all" | "staged" | "unstaged";
 
 export interface DiffScope {
-  kind: ScopeKind
-  ref: string
+  kind: ScopeKind;
+  ref: string;
 }
 
 export interface CliOptions {
-  scope: DiffScope
-  help: boolean
-  version: boolean
+  scope: DiffScope;
+  help: boolean;
+  version: boolean;
 }
 
 export function parseArgs(args: string[]): CliOptions {
-  let kind: ScopeKind = "all"
-  let help = false
-  let version = false
-  let ref: string | undefined
+  let kind: ScopeKind = "all";
+  let help = false;
+  let version = false;
+  let ref: string | undefined;
 
   for (const arg of args) {
     if (arg === "--staged") {
-      kind = "staged"
-      continue
+      kind = "staged";
+      continue;
     }
 
     if (arg === "--unstaged") {
-      kind = "unstaged"
-      continue
+      kind = "unstaged";
+      continue;
     }
 
     if (arg === "--help" || arg === "-h") {
-      help = true
-      continue
+      help = true;
+      continue;
     }
 
     if (arg === "--version" || arg === "-v") {
-      version = true
-      continue
+      version = true;
+      continue;
     }
 
     if (arg.startsWith("-")) {
-      throw new Error(`Unknown option: ${arg}`)
+      throw new Error(`Unknown option: ${arg}`);
     }
 
     if (ref !== undefined) {
-      throw new Error(`Unexpected argument: ${arg}`)
+      throw new Error(`Unexpected argument: ${arg}`);
     }
 
-    ref = arg
+    ref = arg;
   }
 
   return {
     help,
     scope: { kind, ref: ref ?? "HEAD" },
     version,
-  }
+  };
 }
 
 export function nextScope(kind: ScopeKind): ScopeKind {
   if (kind === "all") {
-    return "staged"
+    return "staged";
   }
 
   if (kind === "staged") {
-    return "unstaged"
+    return "unstaged";
   }
 
-  return "all"
+  return "all";
 }
 
 export function scopeLabel(scope: DiffScope) {
   if (scope.kind === "staged") {
-    return `staged vs ${scope.ref}`
+    return `staged vs ${scope.ref}`;
   }
 
   if (scope.kind === "unstaged") {
-    return "unstaged"
+    return "unstaged";
   }
 
-  return `worktree vs ${scope.ref}`
+  return `worktree vs ${scope.ref}`;
 }
 
 export function helpText() {
@@ -128,5 +128,5 @@ Anywhere:
 The whole repo renders as a tree with changes overlaid; open any file
 read-only. The view is live: files, diffs, and recency markers refresh as an
 agent edits, and checks re-run after the repo goes quiet.
-`
+`;
 }

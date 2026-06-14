@@ -1,19 +1,23 @@
-import type { ScrollBoxRenderable } from "@opentui/core"
-import { createEffect, For, Show } from "solid-js"
-import { PROBLEMS_HEIGHT } from "../constants"
-import { state } from "../state"
-import { useTheme } from "../theme/context"
+import type { ScrollBoxRenderable } from "@opentui/core";
+import { createEffect, For, Show } from "solid-js";
+
+import { PROBLEMS_HEIGHT } from "../constants";
+import { state } from "../state";
+import { useTheme } from "../theme/context";
 
 export function ProblemsPanel() {
-  const theme = useTheme()
-  let problemsRef: ScrollBoxRenderable | undefined
+  const theme = useTheme();
+  let problemsRef: ScrollBoxRenderable | undefined;
 
   createEffect(() => {
-    problemsRef?.scrollChildIntoView(state.allProblemItems()[state.problemIndex()]?.id ?? "")
-  })
+    problemsRef?.scrollChildIntoView(state.allProblemItems()[state.problemIndex()]?.id ?? "");
+  });
 
-  const focused = () => state.focusedPane() === "problems"
-  const rowBg = (index: number) => (index === state.problemIndex() && focused() ? theme.colors.surface.cursor : theme.colors.surface.base)
+  const focused = () => state.focusedPane() === "problems";
+  const rowBg = (index: number) =>
+    index === state.problemIndex() && focused()
+      ? theme.colors.surface.cursor
+      : theme.colors.surface.base;
 
   return (
     <box
@@ -23,7 +27,13 @@ export function ProblemsPanel() {
       borderStyle="single"
       borderColor={focused() ? theme.colors.border.focused : theme.colors.border.unfocused}
     >
-      <scrollbox ref={(el) => (problemsRef = el)} width="100%" height={PROBLEMS_HEIGHT - 2} scrollY viewportCulling>
+      <scrollbox
+        ref={(el) => (problemsRef = el)}
+        width="100%"
+        height={PROBLEMS_HEIGHT - 2}
+        scrollY
+        viewportCulling
+      >
         <Show
           when={state.allProblemItems().length > 0}
           fallback={
@@ -35,14 +45,36 @@ export function ProblemsPanel() {
           <For each={state.allProblemItems()}>
             {(item, index) =>
               item.kind === "failure" ? (
-                <box id={item.id} width="100%" flexDirection="row" paddingLeft={1} paddingRight={1} backgroundColor={rowBg(index())}>
+                <box
+                  id={item.id}
+                  width="100%"
+                  flexDirection="row"
+                  paddingLeft={1}
+                  paddingRight={1}
+                  backgroundColor={rowBg(index())}
+                >
                   <text fg={theme.colors.severity.error}>{item.isFirst ? "✖ " : "  "}</text>
                   <text fg={theme.colors.text.secondary}>{item.line}</text>
-                  {item.isFirst ? <text fg={theme.colors.text.muted}>{`  [${item.checker}]`}</text> : null}
+                  {item.isFirst ? (
+                    <text fg={theme.colors.text.muted}>{`  [${item.checker}]`}</text>
+                  ) : null}
                 </box>
               ) : (
-                <box id={item.id} width="100%" flexDirection="row" paddingLeft={1} paddingRight={1} backgroundColor={rowBg(index())}>
-                  <text fg={item.problem.severity === "error" ? theme.colors.severity.error : theme.colors.severity.warning}>
+                <box
+                  id={item.id}
+                  width="100%"
+                  flexDirection="row"
+                  paddingLeft={1}
+                  paddingRight={1}
+                  backgroundColor={rowBg(index())}
+                >
+                  <text
+                    fg={
+                      item.problem.severity === "error"
+                        ? theme.colors.severity.error
+                        : theme.colors.severity.warning
+                    }
+                  >
                     {item.problem.severity === "error" ? "✖ " : "⚠ "}
                   </text>
                   <text fg={theme.colors.text.strong}>
@@ -57,5 +89,5 @@ export function ProblemsPanel() {
         </Show>
       </scrollbox>
     </box>
-  )
+  );
 }
