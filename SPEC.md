@@ -39,8 +39,9 @@ Recency markers come from an append-only in-memory activity event log (the seam 
 
 ## Diagnostics
 
-- Checkers are oxlint (lint), prettier (formatting), and tsc (typecheck); diagnostics parse each tool's output, and tsc runs project-wide.
-- Checkers adapt to the target repo, never to sideye's own runtime. A `package.json` script runs through the detected package manager (`packageManager` field first, then lockfile, defaulting to bun); a fallback binary runs from the repo's `node_modules/.bin` (or `PATH`), never through `bunx`. Prettier runs with `--ignore-unknown` so changed files it cannot parse do not fail the checker.
+- Checkers are oxlint (lint) and tsc (typecheck); diagnostics parse each tool's output, and tsc runs project-wide.
+- Formatting is intentionally not a checker: it is an action, not a diagnostic, and sideye only inspects.
+- Checkers adapt to the target repo, never to sideye's own runtime. A `package.json` script runs through the detected package manager (`packageManager` field first, then lockfile, defaulting to bun); a fallback binary runs from the repo's `node_modules/.bin` (or `PATH`), never through `bunx`.
 - Retain findings for every reported path, not just changed files.
 - Surface in the problems panel (`p`), as inline line markers in the viewer, and as per-file markers in the tree. `n` jumps to the next file with findings.
 - Late diagnostics fill badges and markers in place and never reorder the tree.
