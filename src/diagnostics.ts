@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import type { ChangedFile } from "./git";
 
-export const checkerNames = ["lint", "prettier", "typecheck"] as const;
+export const checkerNames = ["lint", "typecheck"] as const;
 export type CheckerName = (typeof checkerNames)[number];
 type CheckerStatus = "pending" | "clean" | "findings" | "failed" | "unavailable";
 
@@ -49,14 +49,12 @@ type DiscoverChecker = (
 // Record type makes the compiler reject a missing entry
 const checkerRegistry: Record<CheckerName, DiscoverChecker> = {
   lint: lintCommand,
-  prettier: prettierCommand,
   typecheck: typecheckCommand,
 };
 
 export function initialCheckerState(files: ChangedFile[]): CheckerState {
   return {
     lint: initialFileState(files),
-    prettier: initialFileState(files),
     typecheck: initialFileState(files),
   };
 }
@@ -78,7 +76,6 @@ export function markPending(
   }
   return {
     lint: mark(state.lint),
-    prettier: mark(state.prettier),
     typecheck: mark(state.typecheck),
   };
 }
@@ -220,28 +217,6 @@ function lintCommand(
   }
 
   return [unconfiguredChecker("lint")];
-}
-
-function prettierCommand(
-  repoRoot: string,
-  _packageJson: PackageJson | undefined,
-  changedPaths: string[],
-): CheckerCommand[] {
-  const prettier = changedPaths.length === 0 ? undefined : resolveBinary(repoRoot, "prettier");
-  if (prettier === undefined) {
-    return [unconfiguredChecker("prettier")];
-  }
-
-  return [
-    {
-      allowedExitCodes: [0, 1],
-      checker: "prettier",
-      // Skip changed files prettier cannot parse, such as .snap and lockfiles.
-      // Without this they exit 2 and the checker reads as failed.
-      command: [prettier, "--list-different", "--ignore-unknown", ...changedPaths],
-      parser: parsePrettierList,
-    },
-  ];
 }
 
 function typecheckCommand(
@@ -470,24 +445,6 @@ function parseLintJson(stdout: string): Diagnostic[] | undefined {
   }
 
   return undefined;
-}
-
-export function parsePrettierList(output: { stdout: string }): Diagnostic[] {
-  return output.stdout
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(
-      (line) =>
-        line !== "" &&
-        !line.startsWith("Checking formatting") &&
-        !line.startsWith("All matched files"),
-    )
-    .map((path) => ({
-      checker: "prettier" as const,
-      message: "Formatting differs from Prettier",
-      path,
-      severity: "warning" as const,
-    }));
 }
 
 export function parseTypeScriptOutput(output: {

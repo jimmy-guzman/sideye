@@ -9,7 +9,7 @@ open an editor just to answer basic questions:
 - What files are in this repo?
 - What changed?
 - What did the agent touch most recently?
-- Did lint, typecheck, or formatting break?
+- Did lint or typecheck break?
 
 `sideye` is meant to sit in the next pane and answer those questions without
 becoming part of the agent loop. It does not review code, approve changes, talk

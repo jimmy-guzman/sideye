@@ -13,7 +13,6 @@ import {
   findingsLineMap,
   initialCheckerState,
   parseLintOutput,
-  parsePrettierList,
   parseTypeScriptOutput,
   stateForResolvedChecker,
   type CheckerFileState,
@@ -75,7 +74,6 @@ describe("initialCheckerState", () => {
   test("starts every checker as pending", () => {
     const state = initialCheckerState([file]);
     expect(state.lint.get("src/a.ts")?.status).toBe("pending");
-    expect(state.prettier.get("src/a.ts")?.status).toBe("pending");
     expect(state.typecheck.get("src/a.ts")?.status).toBe("pending");
   });
 });
@@ -121,7 +119,7 @@ describe("problem helpers", () => {
 
   test("checkerSummary tallies a single path and tracks pending", () => {
     const state = stateWith([diagnostic({}), diagnostic({ path: "/repo/src/other.ts" })]);
-    // Lint and prettier are still pending in stateWith; typecheck resolved
+    // Lint is still pending in stateWith; typecheck resolved
     expect(checkerSummary("src/a.ts", state)).toEqual({
       errors: 1,
       failed: false,
@@ -210,17 +208,6 @@ describe("diagnostic parsers", () => {
     ]);
   });
 
-  test("parses prettier list output", () => {
-    expect(parsePrettierList({ stdout: "Checking formatting...\nsrc/a.ts\n" })).toEqual([
-      {
-        checker: "prettier",
-        message: "Formatting differs from Prettier",
-        path: "src/a.ts",
-        severity: "warning",
-      },
-    ]);
-  });
-
   test("parses TypeScript diagnostics", () => {
     expect(
       parseTypeScriptOutput({ stderr: "", stdout: "src/a.ts(4,12): error TS2322: nope" }),
@@ -243,13 +230,12 @@ describe("the diagnostics service", () => {
   }
 
   test("unconfigured checkers resolve as unavailable instead of clean or failed", async () => {
-    // Deleted-only changes leave no paths to lint or format
+    // Deleted-only changes leave no paths to lint
     const deleted: ChangedFile = { ...file, kind: "deleted" };
     const dir = mkdtempSync(join(tmpdir(), "sideye-diagnostics-"));
     try {
       const states = await collectStates(dir, [deleted]);
       expect(states.get("lint")?.get("src/a.ts")?.status).toBe("unavailable");
-      expect(states.get("prettier")?.get("src/a.ts")?.status).toBe("unavailable");
     } finally {
       rmSync(dir, { force: true, recursive: true });
     }
@@ -449,21 +435,6 @@ describe("package-manager-aware commands", () => {
       expect(lint?.command?.[0]).toBe(join(dir, "node_modules", ".bin", "oxlint"));
       expect(lint?.command).toContain("src/a.ts");
       expect(lint?.command).not.toContain("bunx");
-    } finally {
-      rmSync(dir, { force: true, recursive: true });
-    }
-  });
-
-  test("passes prettier --ignore-unknown so unformattable changed files don't fail it", () => {
-    const dir = mkdtempSync(join(tmpdir(), "sideye-prettier-"));
-    try {
-      writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "myapp" }));
-      bin(dir, "prettier");
-      const snap: ChangedFile = { ...file, path: "src/a.spec.ts.snap" };
-      const prettier = discoverCheckerCommands(dir, [snap]).find((c) => c.checker === "prettier");
-      expect(prettier?.command?.[0]).toBe(join(dir, "node_modules", ".bin", "prettier"));
-      expect(prettier?.command).toContain("--ignore-unknown");
-      expect(prettier?.command).not.toContain("bunx");
     } finally {
       rmSync(dir, { force: true, recursive: true });
     }
