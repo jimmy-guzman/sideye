@@ -49,6 +49,12 @@ export function HelpOverlay() {
         height={Math.min(KEY_HELP.length, Math.max(1, state.terminalHeight() - 6))}
         scrollY
         viewportCulling
+        scrollbarOptions={{
+          trackOptions: {
+            backgroundColor: theme.colors.scrollbar.track,
+            foregroundColor: theme.colors.scrollbar.thumb,
+          },
+        }}
       >
         <For each={KEY_HELP}>
           {([combo, action]) => (
