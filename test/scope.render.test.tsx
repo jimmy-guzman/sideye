@@ -10,11 +10,11 @@ import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./help
 
 describe("scope switching", () => {
   test("re-runs checks for the new scope's changed set", async () => {
-    // The lint script crashes, so the initial run must surface an explicit failure
     const repoRoot = createFixtureRepo("sideye-scope-", {
-      "package.json": `${JSON.stringify({ scripts: { lint: "exit 2", typecheck: "exit 0" } })}\n`,
+      "package.json": `${JSON.stringify({ name: "scope-fixture" })}\n`,
       "src/a.ts": "const a = 1\n",
     });
+    // An unstaged edit: the default `all` scope sees it, the `staged` scope does not.
     writeFileSync(join(repoRoot, "src", "a.ts"), "const a = 2\n");
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
@@ -26,23 +26,27 @@ describe("scope switching", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      // Main runs the initial checks at startup; mirror that here
+      // Main runs the initial checks at startup; mirror that here. The `all` scope sees the unstaged
+      // Edit, so a.ts shows a "+1 -1" change indicator.
       void state.runChecks(model);
-      const failed = await settleUntil(
-        "failed lint run",
-        (frame) => frame.includes("lint failed:"),
+      await settleUntil(
+        "all scope shows the unstaged change",
+        (frame) => frame.includes("+1 -1") && frame.includes("checks finished"),
         5,
       );
-      expect(failed).toContain("fail");
 
-      // The staged scope has no changes, so a re-run finishes without failures;
-      // That status can only appear if the scope switch re-ran checks
+      // Switch to staged: nothing is staged, so the new changed set is empty and the recheck runs
+      // Against it. The change indicator must disappear, which a stale all-scope frame cannot satisfy.
       mockInput.pressKey("s");
-      const after = await settleUntil("recheck after scope switch", (frame) =>
-        frame.includes("checks finished"),
+      const after = await settleUntil(
+        "staged scope drops the unstaged change",
+        (frame) =>
+          frame.includes("staged vs HEAD") &&
+          !frame.includes("+1 -1") &&
+          frame.includes("checks finished"),
       );
       expect(after).toContain("staged vs HEAD");
-      expect(after).not.toContain("lint failed:");
+      expect(after).not.toContain("+1 -1");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });
