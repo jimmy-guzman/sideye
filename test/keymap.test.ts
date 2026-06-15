@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 import { KeyEvent } from "@opentui/core";
 
@@ -20,20 +20,20 @@ const keyEvent = (overrides: { ctrl?: boolean; name: string }) =>
 
 describe("createKeyHandler", () => {
   test("ctrl-c quits", () => {
-    const quit = mock(() => {});
-    const handle = createKeyHandler({ quit, switchWorktree: () => {} });
+    let quitCount = 0;
+    const handle = createKeyHandler({ quit: () => quitCount++, switchWorktree: () => {} });
 
     handle(keyEvent({ ctrl: true, name: "c" }));
 
-    expect(quit).toHaveBeenCalledTimes(1);
+    expect(quitCount).toBe(1);
   });
 
   test("a plain c does not quit", () => {
-    const quit = mock(() => {});
-    const handle = createKeyHandler({ quit, switchWorktree: () => {} });
+    let quitCount = 0;
+    const handle = createKeyHandler({ quit: () => quitCount++, switchWorktree: () => {} });
 
     handle(keyEvent({ name: "c" }));
 
-    expect(quit).not.toHaveBeenCalled();
+    expect(quitCount).toBe(0);
   });
 });
