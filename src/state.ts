@@ -307,12 +307,17 @@ function createState() {
         .runPromise(Git.pipe(Effect.flatMap((git) => git.search(root, query, paths))), {
           signal: controller.signal,
         })
-        .then((matches) =>
+        // Drop a superseded query's results: a search can resolve just as a newer
+        // Keystroke aborts its controller, so guard the write the same way.
+        .then((matches) => {
+          if (controller.signal.aborted) {
+            return;
+          }
           batch(() => {
             setSearchResults(matches.slice(0, SEARCH_RESULT_CAP));
             setSearchTruncated(matches.length > SEARCH_RESULT_CAP);
-          }),
-        )
+          });
+        })
         // A genuine grep failure clears stale results; our own cancellation (the
         // Aborted controller on re-query) must leave the prior results in place.
         .catch(() => {
