@@ -30,6 +30,7 @@ import {
 } from "./git/activity";
 import { mergeChanged, type ChangedFile, type GitModel, type Worktree } from "./git/model";
 import { renderPatch } from "./git/patch";
+import type { SearchMatch } from "./git/search";
 import { Git } from "./git/service";
 import { buildFileTree, expandAncestorsForPath, flattenTree } from "./git/tree";
 import { runtime } from "./runtime";
@@ -59,6 +60,10 @@ interface DiffView {
   fileContent: FileContent | undefined;
   diff: string;
 }
+
+// Bounds the search result list so a broad query in a large repo can't flood the
+// Panel; the count hitting this cap is surfaced as "N+" so the limit isn't silent.
+export const SEARCH_RESULT_CAP = 500;
 
 const emptyModel: GitModel = {
   changed: [],
@@ -147,6 +152,11 @@ function createState() {
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [paletteQuery, setPaletteQuery] = createSignal("");
   const [paletteIndex, setPaletteIndex] = createSignal(0);
+  const [searchOpen, setSearchOpen] = createSignal(false);
+  const [searchQuery, setSearchQuery] = createSignal("");
+  const [searchIndex, setSearchIndex] = createSignal(0);
+  const [searchScope, setSearchScope] = createSignal<"changed" | "repo">("changed");
+  const [searchResults, setSearchResults] = createSignal<SearchMatch[]>([]);
   const [findOpen, setFindOpen] = createSignal(false);
   const [findActive, setFindActive] = createSignal(false);
   const [findQuery, setFindQuery] = createSignal("");
@@ -265,6 +275,41 @@ function createState() {
       .then(setDiffView)
       .catch(() => {});
     onCleanup(() => controller.abort());
+  });
+
+  // Project content search: debounced git grep over the changed set (honoring the
+  // Active scope, since `changed` already reflects it) or the whole repo. Holds
+  // The previous results until the new query resolves; cleanup aborts the prior
+  // Grep and cancels a not-yet-fired keystroke, the same restart-on-rekey pattern
+  // As the diff pipeline.
+  const SEARCH_DEBOUNCE_MS = 120;
+  createEffect(() => {
+    const query = searchQuery();
+    const paths =
+      searchScope() === "changed" ? gitModel().changed.map((file) => file.path) : undefined;
+    const root = repoRoot();
+    if (
+      !searchOpen() ||
+      query === "" ||
+      root === "" ||
+      (paths !== undefined && paths.length === 0)
+    ) {
+      setSearchResults([]);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      runtime
+        .runPromise(Git.pipe(Effect.flatMap((git) => git.search(root, query, paths))), {
+          signal: controller.signal,
+        })
+        .then((matches) => setSearchResults(matches.slice(0, SEARCH_RESULT_CAP)))
+        .catch(() => {});
+    }, SEARCH_DEBOUNCE_MS);
+    onCleanup(() => {
+      clearTimeout(timer);
+      controller.abort();
+    });
   });
 
   const renderedPatch = createMemo(() => {
@@ -662,6 +707,11 @@ function createState() {
     resetFind,
     runChecks,
     scope,
+    searchIndex,
+    searchOpen,
+    searchQuery,
+    searchResults,
+    searchScope,
     selectFile,
     selectedFile,
     selectedPath,
@@ -691,6 +741,10 @@ function createState() {
     setProblemsOpen,
     setRepoRoot,
     setScope,
+    setSearchIndex,
+    setSearchOpen,
+    setSearchQuery,
+    setSearchScope,
     setSelectedPath,
     setSidebarOpen,
     setStatus,
