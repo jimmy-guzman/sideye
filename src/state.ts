@@ -627,10 +627,9 @@ function createState() {
         ),
       ),
     ).pipe(Stream.forever);
-    const changedRefresh = Stream.merge(
-      Stream.make(undefined),
-      Stream.merge(watchTicks, safetyTicks),
-    ).pipe(Stream.mapEffect(() => refreshChanged));
+    const changedRefresh = Stream.mergeAll([Stream.make(undefined), watchTicks, safetyTicks], {
+      concurrency: "unbounded",
+    }).pipe(Stream.mapEffect(() => refreshChanged));
     const repoFilesPoll = Stream.fromEffect(
       Effect.gen(function* repoFilesLoop() {
         yield* Git.use((git) => git.repoFiles(root)).pipe(
