@@ -37,6 +37,7 @@ import { runtime } from "./runtime";
 import type { SyntaxConfig } from "./syntax/highlight";
 import { findMatches as findMatchIndices } from "./utils/find";
 import { rankFiles } from "./utils/fuzzy";
+import { refreshDelay } from "./utils/refresh-cadence";
 import { truncate } from "./utils/text";
 import { Watcher } from "./watcher/service";
 
@@ -168,6 +169,10 @@ function createState() {
   const [helpOpen, setHelpOpen] = createSignal(false);
   const [gitModel, setGitModel] = createSignal<GitModel>(emptyModel);
   const [repoRoot, setRepoRoot] = createSignal("");
+  // Two timestamps that drive the adaptive safety-poll cadence: when git state
+  // Last changed, and when the fs watcher last ticked (0 = never, i.e. unproven).
+  const [lastChange, setLastChange] = createSignal(0);
+  const [lastWatcherTick, setLastWatcherTick] = createSignal(0);
   const [cursorIndex, setCursorIndex] = createSignal(0);
   const [jumpTarget, setJumpTarget] = createSignal<JumpTarget | undefined>(undefined);
   const [checkerState, setCheckerState] = createSignal<CheckerState>(initialCheckerState([]));
@@ -586,6 +591,8 @@ function createState() {
       return;
     }
     const controller = new AbortController();
+    // A fresh worktree re-proves the watcher from scratch (its fs.watch is new).
+    setLastWatcherTick(0);
     const refreshChanged = Git.use((git) => git.changedFiles(root, scopeNow)).pipe(
       Effect.tap((next) =>
         Effect.sync(() => {
@@ -599,15 +606,27 @@ function createState() {
     );
     // Three refresh sources, merged through ONE serializing mapEffect so two
     // ChangedFiles reads can never overlap and write each other's stale result:
-    // An immediate tick on (re)key, a debounced fs-watch tick per change, and a
-    // 2s safety poll that is the floor whenever the watcher misses a change.
+    // An immediate tick on (re)key, a debounced fs-watch tick per change (which
+    // Also records watcher health), and a safety poll whose cadence adapts to
+    // That health — fast where the watcher is unproven or has missed a change,
+    // Slow once it has earned trust. See `refreshDelay`.
     const watchTicks = Stream.unwrap(
       Effect.gen(function* watchStream() {
         const watcher = yield* Watcher;
         return watcher.changes(root);
       }),
-    );
-    const safetyTicks = Stream.fromEffect(Effect.sleep("2 seconds")).pipe(Stream.forever);
+    ).pipe(Stream.tap(() => Effect.sync(() => setLastWatcherTick(Date.now()))));
+    const safetyTicks = Stream.fromEffect(
+      Effect.suspend(() =>
+        Effect.sleep(
+          refreshDelay({
+            lastChangeAt: lastChange(),
+            lastWatcherTickAt: lastWatcherTick(),
+            now: Date.now(),
+          }),
+        ),
+      ),
+    ).pipe(Stream.forever);
     const changedRefresh = Stream.merge(
       Stream.make(undefined),
       Stream.merge(watchTicks, safetyTicks),
@@ -706,6 +725,7 @@ function createState() {
 
     if (entries.length > 0) {
       batch(() => {
+        setLastChange(Date.now());
         setCheckerState((current) =>
           markPending(
             current,
@@ -796,6 +816,7 @@ function createState() {
     setHelpOpen,
     setIconsEnabled,
     setJumpTarget,
+    setLastChange,
     setNow,
     setPaletteIndex,
     setPaletteOpen,
