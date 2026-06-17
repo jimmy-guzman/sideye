@@ -19,6 +19,16 @@ test("with no override the width is the responsive default", () => {
   expect(state.sidebarWidth()).toBe(34);
 });
 
+test("on a medium terminal the auto width is capped so growing never shrinks it", () => {
+  // At 60 cols the responsive default (34) exceeds the viewer-preserving max (32),
+  // So it caps to 32 and a grow nudge cannot push the rendered width below that.
+  state.setTerminalWidth(60);
+  expect(state.sidebarWidth()).toBe(32);
+
+  state.nudgeSidebarWidth(2);
+  expect(state.sidebarWidth()).toBe(32);
+});
+
 test("nudging seeds from the current width then steps by the delta", () => {
   state.setTerminalWidth(80);
 

@@ -384,17 +384,17 @@ function createState() {
   const paneHeight = createMemo(() => Math.max(1, terminalHeight() - 4 - problemsHeight()));
   const viewerHeight = createMemo(() => Math.max(1, paneHeight() - 1));
   // A manual width is stored raw and only clamped here, so it never overflows a
-  // Shrunken terminal yet is restored intact when the terminal grows back.
+  // Shrunken terminal yet is restored intact when the terminal grows back. The
+  // Responsive default and a manual override share the same clamp, so the
+  // Viewer-preserving max holds in both cases.
   const sidebarMax = () => Math.max(SIDEBAR_MIN_WIDTH, terminalWidth() - SIDEBAR_VIEWER_MIN);
   const sidebarWidth = createMemo(() => {
     if (!sidebarOpen()) {
       return 0;
     }
-    const override = sidebarWidthOverride();
-    if (override !== null) {
-      return Math.max(SIDEBAR_MIN_WIDTH, Math.min(override, sidebarMax()));
-    }
-    return Math.max(34, Math.min(54, Math.floor(terminalWidth() * 0.34)));
+    const responsive = Math.max(34, Math.min(54, Math.floor(terminalWidth() * 0.34)));
+    const desired = sidebarWidthOverride() ?? responsive;
+    return Math.max(SIDEBAR_MIN_WIDTH, Math.min(desired, sidebarMax()));
   });
   // Closing the sidebar moves focus off the now-hidden tree so keys still land
   // Somewhere; the `b` toggle and a shrink-past-minimum share this one path.
