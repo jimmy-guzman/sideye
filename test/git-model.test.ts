@@ -12,6 +12,7 @@ import {
   parsePorcelainStatus,
   parseUntrackedFiles,
   parseWorktreeList,
+  untrackedDiffArgs,
   type ChangedFile,
   type GitModel,
 } from "../src/git/model";
@@ -42,19 +43,16 @@ function model(changed: ChangedFile[], repoFilesKey = "key", scopeKey = "all:HEA
   };
 }
 
+// Every diff invocation pins canonical a//b/ prefixes and disables external diff
+// Drivers, so user gitconfig can't corrupt the patch text the viewer parses.
+const head = ["git", "diff", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/"];
+
 describe("scope arguments", () => {
   test("all compares the worktree against the ref", () => {
-    expect(diffArgs({ kind: "all", ref: "main" })).toEqual(["git", "diff", "main"]);
-    expect(numstatArgs({ kind: "all", ref: "main" })).toEqual([
-      "git",
-      "diff",
-      "main",
-      "--numstat",
-      "-z",
-    ]);
+    expect(diffArgs({ kind: "all", ref: "main" })).toEqual([...head, "main"]);
+    expect(numstatArgs({ kind: "all", ref: "main" })).toEqual([...head, "main", "--numstat", "-z"]);
     expect(nameStatusArgs({ kind: "all", ref: "main" })).toEqual([
-      "git",
-      "diff",
+      ...head,
       "main",
       "--name-status",
       "-z",
@@ -62,10 +60,9 @@ describe("scope arguments", () => {
   });
 
   test("staged compares the index against the ref", () => {
-    expect(diffArgs({ kind: "staged", ref: "HEAD" })).toEqual(["git", "diff", "--cached", "HEAD"]);
+    expect(diffArgs({ kind: "staged", ref: "HEAD" })).toEqual([...head, "--cached", "HEAD"]);
     expect(numstatArgs({ kind: "staged", ref: "HEAD" })).toEqual([
-      "git",
-      "diff",
+      ...head,
       "--cached",
       "HEAD",
       "--numstat",
@@ -74,18 +71,22 @@ describe("scope arguments", () => {
   });
 
   test("unstaged compares the worktree against the index and ignores the ref", () => {
-    expect(diffArgs({ kind: "unstaged", ref: "main" })).toEqual(["git", "diff"]);
-    expect(numstatArgs({ kind: "unstaged", ref: "main" })).toEqual([
-      "git",
-      "diff",
-      "--numstat",
-      "-z",
-    ]);
+    expect(diffArgs({ kind: "unstaged", ref: "main" })).toEqual([...head]);
+    expect(numstatArgs({ kind: "unstaged", ref: "main" })).toEqual([...head, "--numstat", "-z"]);
     expect(nameStatusArgs({ kind: "unstaged", ref: "main" })).toEqual([
-      "git",
-      "diff",
+      ...head,
       "--name-status",
       "-z",
+    ]);
+  });
+
+  test("untracked files diff against /dev/null with the same canonical prefixes", () => {
+    expect(untrackedDiffArgs("src/new.ts")).toEqual([
+      ...head,
+      "--no-index",
+      "--",
+      "/dev/null",
+      "src/new.ts",
     ]);
   });
 });
@@ -268,6 +269,28 @@ describe("loadModel in a fixture repo", () => {
 
       const diff = await loadFileDiff(loaded.repoRoot, { kind: "all", ref: "HEAD" }, changed);
       expect(diff).toContain("+const a = 2");
+    } finally {
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  });
+
+  test("forces canonical a//b/ prefixes despite hostile diff config", async () => {
+    const repoRoot = createFixtureRepo("sideye-git-prefix-", { "src/a.ts": "const a = 1\n" });
+    try {
+      runGit(repoRoot, ["config", "diff.noprefix", "true"]);
+      runGit(repoRoot, ["config", "diff.mnemonicPrefix", "true"]);
+      writeFileSync(join(repoRoot, "src", "a.ts"), "const a = 2\n");
+
+      const scope = { kind: "all", ref: "HEAD" } as const;
+      const loaded = await loadModel(repoRoot, scope);
+      const changed = loaded.changedByPath.get("src/a.ts");
+      if (changed === undefined) {
+        throw new Error("changed file missing from model");
+      }
+
+      const diff = await loadFileDiff(loaded.repoRoot, scope, changed);
+      expect(diff).toContain("--- a/src/a.ts");
+      expect(diff).toContain("+++ b/src/a.ts");
     } finally {
       rmSync(repoRoot, { force: true, recursive: true });
     }

@@ -11,6 +11,7 @@ import {
   numstatArgs,
   parseRepoFiles,
   parseWorktreeList,
+  untrackedDiffArgs,
   type ChangedFile,
   type GitModel,
   type Worktree,
@@ -89,7 +90,7 @@ export const GitLive = Layer.effect(
         ),
       fileDiff: (repoRoot, scope, file) =>
         (file.kind === "untracked"
-          ? process.run(["git", "diff", "--no-index", "--", "/dev/null", file.path], repoRoot, {
+          ? process.run(untrackedDiffArgs(file.path), repoRoot, {
               allowedExitCodes: [0, 1],
             })
           : process.run(

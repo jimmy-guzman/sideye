@@ -218,16 +218,29 @@ export function nameStatusArgs(scope: DiffScope) {
   return [...diffArgs(scope), "--name-status", "-z"];
 }
 
+// Pin canonical a//b/ prefixes and disable external/textconv diff drivers so a
+// User's gitconfig (diff.noprefix, diff.mnemonicPrefix, diff.external) can't
+// Corrupt the patch text the viewer parses. These are command-line options, not
+// `-c diff.srcPrefix` overrides: the config form loses to diff.mnemonicPrefix,
+// The command-line form wins.
+const diffFlags = ["--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/"];
+
 export function diffArgs(scope: DiffScope) {
+  const base = ["git", "diff", ...diffFlags];
+
   if (scope.kind === "staged") {
-    return ["git", "diff", "--cached", scope.ref];
+    return [...base, "--cached", scope.ref];
   }
 
   if (scope.kind === "unstaged") {
-    return ["git", "diff"];
+    return base;
   }
 
-  return ["git", "diff", scope.ref];
+  return [...base, scope.ref];
+}
+
+export function untrackedDiffArgs(path: string) {
+  return ["git", "diff", ...diffFlags, "--no-index", "--", "/dev/null", path];
 }
 
 export function parsePorcelainStatus(output: string): Map<string, StageState> {
