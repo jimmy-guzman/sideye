@@ -36,7 +36,7 @@ function model(changed: ChangedFile[], repoFilesKey = "key", scopeKey = "all:HEA
   return {
     changed,
     changedByPath: new Map(changed.map((entry) => [entry.path, entry])),
-    repoFiles: changed.map((entry) => ({ path: entry.path, tracked: true })),
+    repoFiles: changed.map((entry) => ({ path: entry.path, symlink: false, tracked: true })),
     repoFilesKey,
     repoRoot: "/repo",
     scopeKey,
@@ -241,14 +241,65 @@ describe("worktrees in a fixture repo", () => {
 });
 
 describe("loadModel in a fixture repo", () => {
-  test("survives a dangling untracked symlink instead of crashing", async () => {
+  test("reads a dangling untracked symlink as its one-line target path", async () => {
     const repoRoot = createFixtureRepo("sideye-git-symlink-", { "a.ts": "const a = 1\n" });
     try {
       symlinkSync("/nonexistent-target", join(repoRoot, "broken-link"));
       const loaded = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+      // Git stores the link's target path as its content, so it counts as 1 addition
       expect(loaded.changedByPath.get("broken-link")).toMatchObject({
-        additions: 0,
+        additions: 1,
+        binary: false,
         kind: "untracked",
+      });
+      expect(loaded.repoFiles.find((repoFile) => repoFile.path === "broken-link")).toMatchObject({
+        symlink: true,
+        tracked: false,
+      });
+    } finally {
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  });
+
+  test("flags a tracked symlink from its git mode", async () => {
+    const repoRoot = createFixtureRepo("sideye-git-tracked-symlink-", {
+      "target.ts": "const a = 1\n",
+    });
+    try {
+      symlinkSync("target.ts", join(repoRoot, "link.ts"));
+      runGit(repoRoot, ["add", "link.ts"]);
+      runGit(repoRoot, ["commit", "-m", "add link"]);
+      const loaded = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+
+      expect(loaded.repoFiles.find((repoFile) => repoFile.path === "link.ts")).toMatchObject({
+        symlink: true,
+        tracked: true,
+      });
+      expect(loaded.repoFiles.find((repoFile) => repoFile.path === "target.ts")).toMatchObject({
+        symlink: false,
+        tracked: true,
+      });
+    } finally {
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  });
+
+  test("re-resolves an untracked file's symlink flag when its type flips", async () => {
+    const repoRoot = createFixtureRepo("sideye-git-symlink-flip-", { "a.ts": "const a = 1\n" });
+    try {
+      // Same path and identical git output both times, so only the on-disk type
+      // Changes: the repo-file cache must not mask the flip behind a stale flag.
+      writeFileSync(join(repoRoot, "link"), "plain\n");
+      const before = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+      expect(before.repoFiles.find((repoFile) => repoFile.path === "link")).toMatchObject({
+        symlink: false,
+      });
+
+      rmSync(join(repoRoot, "link"));
+      symlinkSync("a.ts", join(repoRoot, "link"));
+      const after = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+      expect(after.repoFiles.find((repoFile) => repoFile.path === "link")).toMatchObject({
+        symlink: true,
       });
     } finally {
       rmSync(repoRoot, { force: true, recursive: true });
