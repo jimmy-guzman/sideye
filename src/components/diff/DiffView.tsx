@@ -6,7 +6,16 @@ import {
   type TextRenderable,
 } from "@opentui/core";
 import { useRenderer } from "@opentui/solid";
-import { createEffect, createMemo, createSignal, Index, on, onCleanup, Show } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  Index,
+  on,
+  onCleanup,
+  Show,
+  untrack,
+} from "solid-js";
 
 import { isLineRow, type DiffLineRow, type DiffRow } from "../../diff/rows";
 import { sliceSpansWindow } from "../../diff/spans";
@@ -124,8 +133,14 @@ export function DiffView() {
   });
   const maxScrollX = () => Math.max(0, longestLine() - (contentWidth() - 1));
 
-  // Mount a few rows beyond the viewport so a native scroll tick doesn't reveal
-  // Unmounted rows before the scrollTop mirror catches up.
+  // The deepest the viewport can scroll: total content height (sum of per-row
+  // Heights — `rows().length` in non-wrap, the wrapped total otherwise) minus the
+  // Viewport. Bounds the wheel-driven scrollTop so it never runs past the content.
+  const maxScrollY = () =>
+    Math.max(0, heights().reduce((sum, height) => sum + height, 0) - state.viewerHeight());
+
+  // Mount a few rows beyond the viewport as a buffer so a fast scroll tick never
+  // Flashes an unmounted row at the viewport edge.
   const OVERSCAN = 8;
   const window = createMemo(() =>
     wrap()
@@ -150,10 +165,13 @@ export function DiffView() {
   });
 
   // Wheel: left/right scroll long lines horizontally (shared across all lines —
-  // The whole view shifts); up/down use the scrollbox's native vertical scroll,
-  // Mirrored into the window. Zero the native delta on horizontal so the
-  // Scrollbox doesn't also act on it.
+  // The whole view shifts); up/down drive scrollTop directly and move the
+  // Scrollbox to match. Both axes own the scroll and zero the native delta so the
+  // Scrollbox never also acts on it: scrollTop must stay the single source of
+  // Truth for the window, or a native read-back races the uncommitted scroll and
+  // The slice trails the visible content, blanking the lower viewport.
   const HORIZONTAL_STEP = 4;
+  const VERTICAL_STEP = 3;
   const onWheel = (event: MouseEvent) => {
     const direction = event.scroll?.direction;
     const delta = event.scroll?.delta ?? 1;
@@ -169,14 +187,22 @@ export function DiffView() {
       }
       return;
     }
-    queueMicrotask(() => {
-      if (scrollRef !== undefined) {
-        setScrollTop(scrollRef.scrollTop);
-      }
+    const sign = direction === "down" ? 1 : -1;
+    setScrollTop((previous) => {
+      const next = Math.max(0, Math.min(previous + sign * delta * VERTICAL_STEP, maxScrollY()));
+      scrollRef?.scrollTo(next);
+      return next;
     });
+    if (event.scroll !== undefined) {
+      event.scroll.delta = 0;
+    }
   };
 
-  // Keep the cursor's row inside the viewport by scrolling the box to it.
+  // Keep the cursor's row inside the viewport by scrolling the box to it. Reads
+  // The current scroll offset untracked: this effect must fire only when the
+  // Cursor or layout moves, never when scrollTop itself changes. Tracking scrollTop
+  // Would make it re-run on every wheel tick and snap the off-screen cursor back
+  // Into view, so free wheel scrolling could never leave the cursor's screen.
   createEffect(() => {
     const cursorRow = lineRowIndices()[state.cursorIndex()];
     if (cursorRow === undefined || scrollRef === undefined) {
@@ -186,7 +212,7 @@ export function DiffView() {
     const top = rowHeights.slice(0, cursorRow).reduce((sum, height) => sum + height, 0);
     const height = rowHeights[cursorRow] ?? 1;
     const viewport = state.viewerHeight();
-    const current = scrollTop();
+    const current = untrack(scrollTop);
     const next =
       top < current ? top : top + height > current + viewport ? top + height - viewport : current;
     if (next !== current) {
