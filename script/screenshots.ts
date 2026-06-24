@@ -5,19 +5,24 @@
  * screenshots it. The problems/diagnostics shots need a changed file with diagnostics, so a temp
  * errorful file is created in src/ around those runs only.
  *
- * Run on a clean checkout (`bun run screenshots`) so the tree and diff are representative;
- * uncommitted files would show up in the captured tree. Requires `vhs` on PATH (brew install vhs)
- * and a Nerd Font installed for the file-type icons. Pass screen names to shoot a subset, e.g. `bun
- * run screenshots find problems`.
+ * Capture against a clean checkout so the tree and diff are representative — uncommitted files show
+ * up in the captured tree. By default that's this repo; set `SIDEYE_SCREENSHOT_REPO` to point
+ * sideye at another checkout (e.g. a clean main worktree) while the images still land in THIS
+ * repo's assets. Requires `vhs` on PATH (brew install vhs) and a Nerd Font installed for the
+ * file-type icons. Pass screen names to shoot a subset, e.g. `bun run screenshots find problems`.
  */
 import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
-const REPO = resolve(import.meta.dir, "..");
+/** Where the images are written (always this repo, so a PR here picks them up). */
+const ASSETS = resolve(import.meta.dir, "../assets/screenshots");
+/** Which checkout sideye runs against; override to capture a clean tree elsewhere. */
+const REPO = process.env.SIDEYE_SCREENSHOT_REPO
+  ? resolve(process.env.SIDEYE_SCREENSHOT_REPO)
+  : resolve(import.meta.dir, "..");
 const BUN = process.execPath;
 const VHS = "vhs";
-const OUT = "assets/screenshots";
 const TAPES = resolve(tmpdir(), "sideye-screenshots");
 /** A few commits back so the diff and tree show several changed source files, not just a dep bump. */
 const BASE_REF = "HEAD~3";
@@ -38,9 +43,10 @@ const header = [
   "Set TypingSpeed 0",
 ].join("\n");
 
+// VHS runs with cwd = the tmp tape dir, so cd into the capture target before launching sideye.
 const launch = [
   "Hide",
-  `Type "${BUN} run src/main.tsx ${BASE_REF}"`,
+  `Type "cd ${REPO} && ${BUN} run src/main.tsx ${BASE_REF}"`,
   "Enter",
   "Sleep 3s",
   "Show",
@@ -64,11 +70,24 @@ const screens = [
   { name: "worktree-picker", steps: ['Type "w"', "Sleep 800ms"].join("\n") },
   { name: "go-to-file", steps: ["Ctrl+P", 'Type "diff"', "Sleep 600ms"].join("\n") },
   {
-    // Enter commits the find so the title shows the N/M match counter with highlights live.
+    /**
+     * Open the diff and let it focus/settle, then open the find bar and type a term present in the
+     * visible hunks ("scrollTop"). Capture the open bar showing the live N/M counter and highlights
+     * (the render test's verified checkpoint). No commit: a too-early `/` or a no-match Enter both
+     * collapse back to a plain diff with no find UI, so generous settles and a real match matter.
+     */
     name: "find",
-    steps: [openDiffView, 'Type "/"', 'Type "import"', "Sleep 300ms", "Enter", "Sleep 600ms"].join(
-      "\n",
-    ),
+    steps: [
+      "Ctrl+P",
+      'Type "DiffView"',
+      "Sleep 500ms",
+      "Enter",
+      "Sleep 1500ms",
+      'Type "/"',
+      "Sleep 600ms",
+      'Type "scrollTop"',
+      "Sleep 1s",
+    ].join("\n"),
   },
   { name: "search", steps: ["Ctrl+F", 'Type "Effect"', "Sleep 1200ms"].join("\n") },
   {
@@ -91,23 +110,6 @@ const screens = [
       "Sleep 16s",
     ].join("\n"),
   },
-  {
-    // Panel closed so the inline cue is the focus; cursor lands on the type-error line.
-    fixture: true,
-    name: "viewer-diagnostics",
-    steps: [
-      "Ctrl+P",
-      'Type "diagnostics-demo"',
-      "Sleep 400ms",
-      "Enter",
-      "Sleep 800ms",
-      "Down",
-      "Down",
-      "Down",
-      "Down",
-      "Sleep 16s",
-    ].join("\n"),
-  },
 ];
 
 function tapeFor(screen: (typeof screens)[number]) {
@@ -116,14 +118,15 @@ function tapeFor(screen: (typeof screens)[number]) {
     header,
     launch,
     screen.steps,
-    `Screenshot ${OUT}/${screen.name}.png`,
+    // Written next to the tape in the tmp dir (VHS's cwd), then moved into ASSETS.
+    `Screenshot ${screen.name}.png`,
     "",
   ].join("\n\n");
 }
 
 async function run(cmd: string, cmdArgs: string[]) {
   const proc = Bun.spawn([cmd, ...cmdArgs], {
-    cwd: REPO,
+    cwd: TAPES,
     stdio: ["inherit", "inherit", "inherit"],
   });
   const code = await proc.exited;
@@ -136,6 +139,7 @@ async function shoot(screen: (typeof screens)[number]) {
   await Bun.write(`${TAPES}/${screen.name}.tape`, tapeFor(screen));
   console.log(`▶ ${screen.name}`);
   await run(VHS, [`${TAPES}/${screen.name}.tape`]);
+  await Bun.write(`${ASSETS}/${screen.name}.png`, Bun.file(`${TAPES}/${screen.name}.png`));
 }
 
 /** Sync so it can run from a signal handler before exit, not just the finally path. */

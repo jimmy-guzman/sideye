@@ -122,12 +122,6 @@ repo's own, then your `PATH`), so diagnostics work out of the box. Pass
 
 ![problems panel docked below a diff, listing diagnostics with their file locations](assets/screenshots/problems.png)
 
-Diagnostics also surface inline in the viewer: gutter line numbers pick up each
-finding's severity color, and the status bar shows the message for the line at
-the cursor.
-
-![viewer showing a source file with severity-colored gutter line numbers and a diagnostic message in the status bar](assets/screenshots/viewer-diagnostics.png)
-
 ## Keys
 
 | Key         | Action                                            |
