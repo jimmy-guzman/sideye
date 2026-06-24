@@ -181,6 +181,22 @@ describe("buildProblemItems", () => {
     ]);
   });
 
+  test("includes every distinct failure message but dedupes the repeats across files", () => {
+    const items = buildProblemItems({
+      diagnostics: new Map([
+        ["a.ts", { count: 0, diagnostics: [], message: "server crashed", status: "failed" }],
+        // A failed server repeats its message on every file it covers — show it once.
+        ["b.ts", { count: 0, diagnostics: [], message: "server crashed", status: "failed" }],
+        ["c.ts", { count: 0, diagnostics: [], message: "different failure", status: "failed" }],
+      ]),
+    });
+
+    expect(items.filter((item) => item.kind === "failure").map((item) => item.line)).toEqual([
+      "server crashed",
+      "different failure",
+    ]);
+  });
+
   test("no problems yields no rows", () => {
     expect(buildProblemItems({ diagnostics: new Map() })).toEqual([]);
   });

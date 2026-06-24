@@ -76,28 +76,32 @@ const severityOrder = { error: 0, info: 2, warning: 1 } as const;
 export function buildProblemItems(state: CheckerState): ProblemItem[] {
   const items: ProblemItem[] = [];
 
-  const failureLines = checkerNames.flatMap((checker) => {
-    for (const fileState of state[checker].values()) {
-      if (fileState.status === "failed" && fileState.message !== undefined) {
-        return fileState.message
-          .split("\n")
-          .filter((line) => line.trim() !== "")
-          .map((line, lineIndex) => ({ checker, line, lineIndex }));
-      }
-    }
-    return [];
+  // A failed server stamps the same message onto every file it covers, so collect every failed
+  // File's message but show each distinct failure once (a `Set` dedupes the repeats) rather than
+  // The first file's alone.
+  const failureMessages = checkerNames.flatMap((checker) => {
+    const messages = [...state[checker].values()]
+      .filter((fileState) => fileState.status === "failed")
+      .map((fileState) => fileState.message)
+      .filter((message): message is string => message !== undefined);
+    return [...new Set(messages)].map((message) => ({ checker, message }));
   });
 
-  if (failureLines.length > 0) {
+  if (failureMessages.length > 0) {
     items.push({ id: "failure-header", kind: "failure-header" });
-    failureLines.forEach(({ checker, line, lineIndex }) => {
-      items.push({
-        checker,
-        id: `failure-${checker}-${lineIndex}`,
-        isFirst: lineIndex === 0,
-        kind: "failure",
-        line,
-      });
+    failureMessages.forEach(({ checker, message }, messageIndex) => {
+      message
+        .split("\n")
+        .filter((line) => line.trim() !== "")
+        .forEach((line, lineIndex) => {
+          items.push({
+            checker,
+            id: `failure-${checker}-${messageIndex}-${lineIndex}`,
+            isFirst: lineIndex === 0,
+            kind: "failure",
+            line,
+          });
+        });
     });
   }
 
