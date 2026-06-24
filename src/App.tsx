@@ -31,9 +31,6 @@ export function App() {
     state.setTerminalHeight(dimensions().height);
   });
 
-  // Advertise sideye to the terminal/multiplexer tab bar via OSC 2. Lead with the
-  // Worktree dir so truncation (which eats the end) keeps tabs distinguishable;
-  // `sideye` trails as the anchor. The main checkout collapses dir == repo.
   createEffect(() => {
     const dir = basename(state.gitModel().repoRoot);
     if (dir === "") {
@@ -45,12 +42,16 @@ export function App() {
     renderer.setTerminalTitle([...segments, "sideye"].join(" · "));
   });
 
-  function quit() {
+  function quit(message?: string) {
     // The renderer no longer owns the background fibers (the git poll runs on the
     // Shared runtime, not the render tree), so tear down the screen and exit
     // Rather than waiting for an event loop that the poll keeps alive.
     renderer.setTerminalTitle("");
     renderer.destroy();
+    // Log after destroy so the message lands on the restored screen, not the alt buffer.
+    if (message !== undefined) {
+      console.log(message);
+    }
     process.exit(0);
   }
 
@@ -122,10 +123,7 @@ export function App() {
       return;
     }
     // Nothing recoverable: the repository itself is gone.
-    renderer.setTerminalTitle("");
-    renderer.destroy();
-    console.log("sideye: worktree deleted, nothing left to inspect");
-    process.exit(0);
+    quit("sideye: worktree deleted, nothing left to inspect");
   });
 
   useKeyboard(createKeyHandler({ quit, switchWorktree }));
