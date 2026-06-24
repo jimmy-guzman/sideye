@@ -8,15 +8,14 @@ import { Clipboard } from "./clipboard/service";
 import { PROBLEMS_HEIGHT, SIDEBAR_MIN_WIDTH, SIDEBAR_VIEWER_MIN } from "./constants";
 import {
   allFindings,
-  checkerNames,
   countBySeverity,
   findingsLineMap,
   initialCheckerState,
   markPending,
-  type CheckerName,
   type CheckerState,
   type Diagnostic,
 } from "./diagnostics/checker";
+import { buildProblemItems } from "./diagnostics/problems";
 import { Provisioner } from "./diagnostics/provision";
 import { Diagnostics } from "./diagnostics/service";
 import { DiffEngine, structureDiff, type DiffRender, type RenderInput } from "./diff/engine";
@@ -47,10 +46,6 @@ interface JumpTarget {
   line: number;
   escalate: boolean;
 }
-
-type ProblemItem =
-  | { kind: "failure"; id: string; checker: CheckerName; line: string; isFirst: boolean }
-  | { kind: "problem"; id: string; problem: Diagnostic };
 
 // The coherent diff-pane snapshot. A selection commits in two structure-identical
 // Phases: first plain rows (parse only, instant), then a rows upgrade once the
@@ -247,32 +242,12 @@ function createState() {
       ? new Map<number, Diagnostic[]>()
       : findingsLineMap(path, checkerState());
   });
-  const allProblemItems = createMemo<ProblemItem[]>(() => {
-    const state = checkerState();
-    const items: ProblemItem[] = [];
-    checkerNames.forEach((checker) => {
-      for (const [, fileState] of state[checker]) {
-        if (fileState.status === "failed" && fileState.message !== undefined) {
-          fileState.message
-            .split("\n")
-            .filter((line) => line.trim() !== "")
-            .forEach((line, lineIndex) => {
-              items.push({
-                checker,
-                id: `failure-${checker}-${lineIndex}`,
-                isFirst: lineIndex === 0,
-                kind: "failure",
-                line,
-              });
-            });
-          break;
-        }
-      }
-    });
-    problems().forEach((problem, index) => {
-      items.push({ id: `problem-${index}`, kind: "problem", problem });
-    });
-    return items;
+  const allProblemItems = createMemo(() => buildProblemItems(checkerState()));
+  // The first row the problems cursor can land on; headers and help sub-lines are
+  // Skipped so opening the panel never parks the cursor on a non-navigable row.
+  const firstNavigableProblemIndex = createMemo(() => {
+    const index = allProblemItems().findIndex((item) => item.kind === "problem");
+    return index === -1 ? 0 : index;
   });
   const paletteResults = createMemo(() => {
     if (!paletteOpen()) {
@@ -839,6 +814,7 @@ function createState() {
     findMatches,
     findOpen,
     findQuery,
+    firstNavigableProblemIndex,
     focusedNodeId,
     focusedPane,
     focusedRowIndex,

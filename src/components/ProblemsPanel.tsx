@@ -2,8 +2,14 @@ import type { ScrollBoxRenderable } from "@opentui/core";
 import { createEffect, For, Show } from "solid-js";
 
 import { PROBLEMS_HEIGHT } from "../constants";
+import { sourceLabel, type ProblemItem } from "../diagnostics/problems";
 import { state } from "../state";
 import { useTheme } from "../theme/context";
+import { truncate } from "../utils/text";
+
+const INDENT = 2;
+const ICON = 2;
+const MIN_SUMMARY = 12;
 
 export function ProblemsPanel() {
   const theme = useTheme();
@@ -14,10 +20,26 @@ export function ProblemsPanel() {
   });
 
   const focused = () => state.focusedPane() === "problems";
-  const rowBg = (index: number) =>
-    index === state.problemIndex() && focused()
-      ? theme.colors.surface.cursor
-      : theme.colors.surface.base;
+  // The cursor lives on a `problem`; its `help` sub-line shares the highlight so a
+  // Selected entry reads as one block, and a stray index on a header never lights up.
+  const selected = (index: number, item: ProblemItem) =>
+    focused() &&
+    ((item.kind === "problem" && index === state.problemIndex()) ||
+      (item.kind === "help" && item.owner === state.problemIndex()));
+  const rowBg = (index: number, item: ProblemItem) =>
+    selected(index, item) ? theme.colors.surface.cursor : theme.colors.surface.base;
+
+  // Border (2) + scrollbar (1) eat the panel width before the row's own padding.
+  const contentWidth = () => Math.max(0, state.terminalWidth() - 3);
+
+  const severityColor = (severity: "error" | "warning" | "info") =>
+    severity === "error"
+      ? theme.colors.severity.error
+      : severity === "warning"
+        ? theme.colors.severity.warning
+        : theme.colors.severity.info;
+  const severityIcon = (severity: "error" | "warning" | "info") =>
+    severity === "error" ? "✖" : severity === "warning" ? "⚠" : "ℹ";
 
   return (
     <box
@@ -49,56 +71,109 @@ export function ProblemsPanel() {
           }
         >
           <For each={state.allProblemItems()}>
-            {(item, index) =>
-              item.kind === "failure" ? (
-                <box
-                  id={item.id}
-                  width="100%"
-                  flexDirection="row"
-                  paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor={rowBg(index())}
-                >
-                  <text fg={theme.colors.severity.error}>{item.isFirst ? "✖ " : "  "}</text>
-                  <text fg={theme.colors.text.secondary}>{item.line}</text>
-                  {item.isFirst ? (
-                    <text fg={theme.colors.text.muted}>{`  [${item.checker}]`}</text>
-                  ) : null}
-                </box>
-              ) : (
-                <box
-                  id={item.id}
-                  width="100%"
-                  flexDirection="row"
-                  paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor={rowBg(index())}
-                >
-                  <text
-                    fg={
-                      item.problem.severity === "error"
-                        ? theme.colors.severity.error
-                        : item.problem.severity === "warning"
-                          ? theme.colors.severity.warning
-                          : theme.colors.severity.info
-                    }
+            {(item, index) => {
+              if (item.kind === "failure-header") {
+                return (
+                  <box id={item.id} width="100%" paddingLeft={1} paddingTop={index() === 0 ? 0 : 1}>
+                    <text fg={theme.colors.severity.error}>checks failed</text>
+                  </box>
+                );
+              }
+
+              if (item.kind === "failure") {
+                return (
+                  <box
+                    id={item.id}
+                    width="100%"
+                    flexDirection="row"
+                    paddingLeft={1 + INDENT}
+                    paddingRight={1}
                   >
-                    {item.problem.severity === "error"
-                      ? "✖ "
-                      : item.problem.severity === "warning"
-                        ? "⚠ "
-                        : "ℹ "}
-                  </text>
-                  <text fg={theme.colors.text.strong}>
-                    {`${item.problem.path}${item.problem.line === undefined ? "" : `:${item.problem.line}`} `}
-                  </text>
-                  <text fg={theme.colors.text.secondary}>{item.problem.message}</text>
-                  <text
-                    fg={theme.colors.text.muted}
-                  >{`  [${item.problem.source ?? item.problem.checker}]`}</text>
+                    <text fg={theme.colors.severity.error}>{item.isFirst ? "✖ " : "  "}</text>
+                    <text fg={theme.colors.text.secondary}>{item.line}</text>
+                  </box>
+                );
+              }
+
+              if (item.kind === "file-header") {
+                const counts = [
+                  { color: theme.colors.severity.error, glyph: "✖", n: item.errors },
+                  { color: theme.colors.severity.warning, glyph: "⚠", n: item.warnings },
+                  { color: theme.colors.severity.info, glyph: "ℹ", n: item.info },
+                ].filter((count) => count.n > 0);
+                return (
+                  <box
+                    id={item.id}
+                    width="100%"
+                    flexDirection="row"
+                    justifyContent="space-between"
+                    paddingLeft={1}
+                    paddingRight={1}
+                    paddingTop={index() === 0 ? 0 : 1}
+                  >
+                    <text fg={theme.colors.text.strong}>
+                      {truncate(item.path, Math.max(0, contentWidth() - 2 - counts.length * 4))}
+                    </text>
+                    <box flexDirection="row">
+                      <For each={counts}>
+                        {(count) => <text fg={count.color}>{` ${count.glyph} ${count.n}`}</text>}
+                      </For>
+                    </box>
+                  </box>
+                );
+              }
+
+              if (item.kind === "help") {
+                return (
+                  <box
+                    id={item.id}
+                    width="100%"
+                    paddingLeft={1 + INDENT + ICON}
+                    paddingRight={1}
+                    backgroundColor={rowBg(index(), item)}
+                  >
+                    <text fg={theme.colors.text.faint}>
+                      {`└ ${truncate(item.text, Math.max(0, contentWidth() - (1 + INDENT + ICON) - 1 - 2))}`}
+                    </text>
+                  </box>
+                );
+              }
+
+              const { problem } = item;
+              const source = sourceLabel(problem.source ?? problem.checker);
+              const lineLabel =
+                problem.line === undefined ? "" : String(problem.line).padStart(item.lineWidth);
+              // Everything the message shares its row with: paddingLeft (1 + INDENT),
+              // PaddingRight (1), the icon, and the line column (digits + trailing space).
+              const overhead = 1 + INDENT + 1 + ICON + item.lineWidth + 1;
+              // Reserve room for the source too, then degrade: drop the right-pinned
+              // Source before truncating the message below readability.
+              const withSource = contentWidth() - overhead - (source.length + 1);
+              const showSource = withSource >= MIN_SUMMARY;
+              const budget = Math.max(0, showSource ? withSource : contentWidth() - overhead);
+              return (
+                <box
+                  id={item.id}
+                  width="100%"
+                  flexDirection="row"
+                  justifyContent="space-between"
+                  paddingLeft={1 + INDENT}
+                  paddingRight={1}
+                  backgroundColor={rowBg(index(), item)}
+                >
+                  <box flexDirection="row">
+                    <text
+                      fg={severityColor(problem.severity)}
+                    >{`${severityIcon(problem.severity)} `}</text>
+                    <text fg={theme.colors.text.muted}>{`${lineLabel} `}</text>
+                    <text fg={theme.colors.text.secondary}>{truncate(item.summary, budget)}</text>
+                  </box>
+                  <Show when={showSource}>
+                    <text fg={theme.colors.text.muted}>{source}</text>
+                  </Show>
                 </box>
-              )
-            }
+              );
+            }}
           </For>
         </Show>
       </scrollbox>

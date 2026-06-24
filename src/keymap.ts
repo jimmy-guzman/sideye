@@ -173,6 +173,9 @@ export function createKeyHandler(ctx: KeyHandlerCtx) {
         const open = state.problemsOpen();
         state.setFocusedPane(open ? "tree" : "problems");
         state.setProblemsOpen(!open);
+        if (!open) {
+          state.setProblemIndex(state.firstNavigableProblemIndex());
+        }
         return;
       }
 
@@ -282,10 +285,19 @@ export function createKeyHandler(ctx: KeyHandlerCtx) {
 
       if (focusedPane === "problems") {
         const items = state.allProblemItems();
+        const current = state.problemIndex();
         if (key.name === "j" || key.name === "down") {
-          state.setProblemIndex(Math.min(state.problemIndex() + 1, Math.max(0, items.length - 1)));
+          const next = items.findIndex((item, index) => index > current && item.kind === "problem");
+          if (next !== -1) {
+            state.setProblemIndex(next);
+          }
         } else if (key.name === "k" || key.name === "up") {
-          state.setProblemIndex(Math.max(state.problemIndex() - 1, 0));
+          const previous = items.findLastIndex(
+            (item, index) => index < current && item.kind === "problem",
+          );
+          if (previous !== -1) {
+            state.setProblemIndex(previous);
+          }
         } else if (key.name === "return") {
           const item = items[state.problemIndex()];
           if (item?.kind === "problem") {
