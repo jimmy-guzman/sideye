@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { basename } from "node:path";
 
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid";
 import { createEffect, Show } from "solid-js";
@@ -30,10 +31,25 @@ export function App() {
     state.setTerminalHeight(dimensions().height);
   });
 
+  // Advertise sideye to the terminal/multiplexer tab bar via OSC 2. Lead with the
+  // Worktree dir so truncation (which eats the end) keeps tabs distinguishable;
+  // `sideye` trails as the anchor. The main checkout collapses dir == repo.
+  createEffect(() => {
+    const dir = basename(state.gitModel().repoRoot);
+    if (dir === "") {
+      renderer.setTerminalTitle("sideye");
+      return;
+    }
+    const repo = basename(state.mainWorktreePath()) || dir;
+    const segments = dir === repo ? [repo] : [dir, repo];
+    renderer.setTerminalTitle([...segments, "sideye"].join(" · "));
+  });
+
   function quit() {
     // The renderer no longer owns the background fibers (the git poll runs on the
     // Shared runtime, not the render tree), so tear down the screen and exit
     // Rather than waiting for an event loop that the poll keeps alive.
+    renderer.setTerminalTitle("");
     renderer.destroy();
     process.exit(0);
   }
@@ -106,6 +122,7 @@ export function App() {
       return;
     }
     // Nothing recoverable: the repository itself is gone.
+    renderer.setTerminalTitle("");
     renderer.destroy();
     console.log("sideye: worktree deleted, nothing left to inspect");
     process.exit(0);
