@@ -24,11 +24,8 @@ export const darkTheme: Theme = {
   scrollbar: { thumb: "#515355" },
   severity: {
     error: "#e76761",
-    errorGutterBg: "#4f2d2b",
     info: "#4fa8e1",
-    infoGutterBg: "#1e3b4f",
     warning: "#dda734",
-    warningGutterBg: "#42361f",
   },
   stage: {
     mixed: "#ec8d38",

@@ -9,23 +9,16 @@ import type { Theme } from "./tokens";
 // Rgba.transparent keep working and renders never re-convert
 export interface ResolvedTheme {
   colors: Theme;
-  // "...Active" variants are the diff/diagnostic backgrounds brightened for the
-  // Current (cursor) line, so a selected add/remove/diagnostic line reads as a
-  // Brighter version of its own state instead of being flattened to grey.
+  // "...Active" variants are the diff backgrounds brightened for the current
+  // (cursor) line, so a selected add/remove line reads as a brighter version of
+  // Its own state instead of being flattened to grey.
   rgba: {
-    addedBg: RGBA;
     addedBgActive: RGBA;
     addedLineNumberBgActive: RGBA;
-    cursorBg: RGBA;
-    errorGutterBg: RGBA;
-    findMatchBg: RGBA;
     findMatchBgActive: RGBA;
-    infoGutterBg: RGBA;
-    removedBg: RGBA;
     removedBgActive: RGBA;
     removedLineNumberBgActive: RGBA;
     transparent: RGBA;
-    warningGutterBg: RGBA;
   };
 }
 
@@ -44,19 +37,12 @@ export function resolveTheme(theme: Theme): ResolvedTheme {
   return {
     colors: theme,
     rgba: {
-      addedBg: RGBA.fromHex(theme.diff.addedBg),
       addedBgActive: active(theme.diff.addedBg),
       addedLineNumberBgActive: active(theme.diff.addedLineNumberBg),
-      cursorBg: RGBA.fromHex(theme.surface.cursor),
-      errorGutterBg: RGBA.fromHex(theme.severity.errorGutterBg),
-      findMatchBg: RGBA.fromHex(theme.find.matchBg),
       findMatchBgActive: active(theme.find.matchBg),
-      infoGutterBg: RGBA.fromHex(theme.severity.infoGutterBg),
-      removedBg: RGBA.fromHex(theme.diff.removedBg),
       removedBgActive: active(theme.diff.removedBg),
       removedLineNumberBgActive: active(theme.diff.removedLineNumberBg),
       transparent: RGBA.fromValues(0, 0, 0, 0),
-      warningGutterBg: RGBA.fromHex(theme.severity.warningGutterBg),
     },
   };
 }

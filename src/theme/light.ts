@@ -24,11 +24,8 @@ export const lightTheme: Theme = {
   scrollbar: { thumb: "#a2a5a8" },
   severity: {
     error: "#b64340",
-    errorGutterBg: "#f7cbc7",
     info: "#0070a6",
-    infoGutterBg: "#bbddf6",
     warning: "#9d7200",
-    warningGutterBg: "#e8d5b3",
   },
   stage: {
     mixed: "#af5b00",

@@ -49,16 +49,19 @@ describe("theme parity", () => {
 });
 
 describe("resolveTheme", () => {
-  test("precomputed RGBA values derive from their hex tokens", () => {
+  test("transparent is the zero RGBA singleton", () => {
     const resolved = resolveTheme(darkTheme);
 
     expect(resolved.colors).toBe(darkTheme);
-    expect(resolved.rgba.addedBg).toEqual(RGBA.fromHex(darkTheme.diff.addedBg));
-    expect(resolved.rgba.cursorBg).toEqual(RGBA.fromHex(darkTheme.surface.cursor));
-    expect(resolved.rgba.errorGutterBg).toEqual(RGBA.fromHex(darkTheme.severity.errorGutterBg));
-    expect(resolved.rgba.findMatchBg).toEqual(RGBA.fromHex(darkTheme.find.matchBg));
-    expect(resolved.rgba.removedBg).toEqual(RGBA.fromHex(darkTheme.diff.removedBg));
     expect(resolved.rgba.transparent).toEqual(RGBA.fromValues(0, 0, 0, 0));
-    expect(resolved.rgba.warningGutterBg).toEqual(RGBA.fromHex(darkTheme.severity.warningGutterBg));
+  });
+
+  test("active variants brighten their base diff token without overflowing", () => {
+    const resolved = resolveTheme(darkTheme);
+    const base = RGBA.fromHex(darkTheme.diff.removedBg);
+
+    // The dominant (red) channel lifts above the base and stays clamped to 1.
+    expect(resolved.rgba.removedBgActive.r).toBeGreaterThan(base.r);
+    expect(resolved.rgba.removedBgActive.r).toBeLessThanOrEqual(1);
   });
 });
