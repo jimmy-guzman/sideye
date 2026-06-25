@@ -11,11 +11,11 @@ import { state } from "./state";
 import { nextFindingPath, orderedFindingPaths } from "./ui-helpers";
 
 /**
- * The injection seam for the keymap's irreversible host side-effects (today just `quit`, which
- * tears down the renderer and exits the process). Injected rather than reached through `state`
- * because it needs the `renderer` (a render-tree resource that must not leak into the global
- * `state` singleton) and because injection keeps the otherwise-pure keymap testable without a real
- * renderer or `process.exit`. Data actions never belong here; they live in `state`.
+ * The injection seam for the keymap's irreversible host side-effects (`quit` tears down the
+ * renderer and exits the process; `openInEditor` suspends/resumes it around a subprocess). Both
+ * need the `renderer` (a render-tree resource that must not leak into the global `state`
+ * singleton), and injection keeps the otherwise-pure keymap testable without a real renderer or
+ * `process.exit`. Data actions never belong here; they live in `state`.
  */
 interface HostEffects {
   quit: () => void;

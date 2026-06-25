@@ -228,6 +228,20 @@ describe("resolveEditorTemplate", () => {
     }
   });
 
+  test("SIDEYE_EDITOR is returned verbatim — full template for a non-known editor is not mangled", () => {
+    const saved = process.env["SIDEYE_EDITOR"];
+    process.env["SIDEYE_EDITOR"] = "emacsclient -nw +{line} {file}";
+    try {
+      expect(resolveEditorTemplate(undefined)).toBe("emacsclient -nw +{line} {file}");
+    } finally {
+      if (saved !== undefined) {
+        process.env["SIDEYE_EDITOR"] = saved;
+      } else {
+        delete process.env["SIDEYE_EDITOR"];
+      }
+    }
+  });
+
   test("SIDEYE_EDITOR beats $EDITOR", () => {
     const savedSideye = process.env["SIDEYE_EDITOR"];
     const savedEditor = process.env["EDITOR"];

@@ -44,7 +44,7 @@ const KNOWN_EDITOR_TEMPLATES: Record<string, string> = {
 /**
  * Resolves the editor command template from (in priority order):
  *   1. An explicit `--editor` value passed on the CLI
- *   2. The `SIDEYE_EDITOR` environment variable
+ *   2. The `SIDEYE_EDITOR` environment variable (returned as-is, no heuristic)
  *   3. `$EDITOR` / `$VISUAL`, with a known-editor heuristic for the line arg format
  *   4. `vim` as the hard fallback
  *
@@ -56,7 +56,12 @@ export function resolveEditorTemplate(explicit: string | undefined): string {
     return explicit;
   }
 
-  const env = process.env["SIDEYE_EDITOR"] ?? process.env["EDITOR"] ?? process.env["VISUAL"];
+  const sideye = process.env["SIDEYE_EDITOR"];
+  if (sideye !== undefined && sideye !== "") {
+    return sideye;
+  }
+
+  const env = process.env["EDITOR"] ?? process.env["VISUAL"];
   if (env !== undefined && env !== "") {
     const bin = basename(env.split(/\s+/)[0] ?? env);
     return KNOWN_EDITOR_TEMPLATES[bin] ?? `${env} +{line} {file}`;
