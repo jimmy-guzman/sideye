@@ -16,7 +16,7 @@ import { defaultExpandedDirectories, expandAncestorsForPath } from "./git/tree";
 import { Process } from "./process";
 import { runtime } from "./runtime";
 import { state } from "./state";
-import { setActiveThemeName, setThemeMode } from "./theme/mode";
+import { setAppearance, setSelection } from "./theme/active";
 import { hasTheme, registerThemes, resolveThemes, selectThemeName } from "./theme/registry";
 
 try {
@@ -84,15 +84,16 @@ try {
   // Reused for the first paint below, so detection costs no extra frame.
   const renderer = await createCliRenderer({ exitOnCtrlC: false });
   const appearance = (await renderer.waitForThemeMode(100)) ?? "dark";
-  setThemeMode(appearance);
 
-  // Register the configured themes and pick the active one for this appearance,
-  // Before the app runtime warms the highlighter. A selection naming an unknown
-  // Theme falls back to the built-in (themeForName) and is reported.
+  // Register the configured themes and seed the reactive theme state before the
+  // App runtime warms the highlighter. Selection + appearance feed the active
+  // Theme; a selection naming an unknown theme falls back to the built-in and is
+  // Reported. The renderer's theme_mode event updates appearance live (App.tsx).
   const { themes, issues: themeIssues } = resolveThemes(config.themes ?? {});
   registerThemes(themes);
+  setSelection(config.theme);
+  setAppearance(appearance);
   const activeName = selectThemeName(config.theme, appearance);
-  setActiveThemeName(activeName);
   if (!hasTheme(activeName)) {
     themeIssues.push(`theme "${activeName}" not found; using the ${appearance} default`);
   }

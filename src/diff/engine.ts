@@ -12,7 +12,7 @@ import {
 } from "@pierre/diffs";
 import { Context, Effect, Layer } from "effect";
 
-import { activeThemeName, themeMode } from "../theme/mode";
+import { activeThemeName, appearance } from "../theme/active";
 import { syntaxThemeForName, themeForName } from "../theme/registry";
 import { shikiTheme, SIDEYE_SHIKI_THEME_NAME } from "../theme/shiki";
 import { flattenLineSpans, type RenderSpan } from "./hast";
@@ -52,7 +52,7 @@ async function ensureDiffTheme() {
   const themeName = diffThemeName();
   if (syntaxThemeForName(name) === undefined && !registered.has(themeName)) {
     registerCustomTheme(themeName, () =>
-      Promise.resolve({ ...shikiTheme(themeForName(name), themeMode()), name: themeName }),
+      Promise.resolve({ ...shikiTheme(themeForName(name), appearance()), name: themeName }),
     );
     registered.add(themeName);
   }

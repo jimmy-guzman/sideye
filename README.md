@@ -175,7 +175,8 @@ shows a notice.
 
 Today it themes the UI. Define named themes under `themes` and pick one with
 `theme`, either a single name (pinned) or a `{ "dark": ..., "light": ... }` pair
-that follows the terminal's appearance. A theme is a full set of color tokens, or
+that follows the terminal's appearance, live: flip your terminal (or OS) between
+dark and light mid-session and sideye re-themes to match. A theme is a full set of color tokens, or
 `{ "base": <name>, ... }` that inherits another theme (a built-in `dark`/`light`,
 or another of your themes) and overrides only the tokens you name. Every color is
 a 6-digit lowercase hex string. A theme may also set `"syntaxTheme"` to any

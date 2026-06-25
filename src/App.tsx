@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
 
+import type { ThemeMode } from "@opentui/core";
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid";
-import { createEffect, Show } from "solid-js";
+import { createEffect, onCleanup, Show } from "solid-js";
 
 import { HeaderBar } from "./components/HeaderBar";
 import { HelpOverlay } from "./components/HelpOverlay";
@@ -17,6 +18,7 @@ import { WorktreePicker } from "./components/WorktreePicker";
 import type { Worktree } from "./git/model";
 import { createKeyHandler } from "./keymap";
 import { state } from "./state";
+import { setAppearance } from "./theme/active";
 import { useTheme } from "./theme/context";
 import { worktreeLabel } from "./ui-helpers";
 
@@ -29,6 +31,17 @@ export function App() {
     state.setTerminalWidth(dimensions().width);
     state.setTerminalHeight(dimensions().height);
   });
+
+  // Follow the terminal's appearance at runtime: when the OS flips dark/light
+  // Mid-session, the renderer emits theme_mode and the reactive theme state
+  // Re-themes the UI and re-renders the diff with the new palette.
+  const onThemeMode = (mode: ThemeMode | null) => {
+    if (mode !== null) {
+      setAppearance(mode);
+    }
+  };
+  renderer.on("theme_mode", onThemeMode);
+  onCleanup(() => renderer.off("theme_mode", onThemeMode));
 
   createEffect(() => {
     const dir = basename(state.gitModel().repoRoot);

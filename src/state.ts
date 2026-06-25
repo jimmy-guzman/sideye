@@ -46,6 +46,7 @@ import {
   flattenTree,
 } from "./git/tree";
 import { runtime } from "./runtime";
+import { activeThemeName } from "./theme/active";
 import { worktreeLabel } from "./ui-helpers";
 import { findMatches as findMatchIndices } from "./utils/find";
 import { rankFiles } from "./utils/fuzzy";
@@ -299,6 +300,9 @@ function createState() {
   });
   const [diffView, setDiffView] = createSignal<DiffView | undefined>(undefined);
   createEffect(() => {
+    // Re-run on a theme change too (a runtime appearance flip), so the diff
+    // Re-renders with the new palette; the engine keys its cache by the theme.
+    activeThemeName();
     const src = diffSource();
     if (src === undefined) {
       setDiffView(undefined);
