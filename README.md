@@ -173,8 +173,8 @@ A malformed or invalid config never blocks startup: it falls back to defaults an
 shows a notice.
 
 Define themes under `themes` and pick one with `theme`: a single name, or a
-`{ "dark": ..., "light": ... }` pair that follows the terminal live (flip your OS
-appearance and sideye re-themes). A theme is a full set of `#rrggbb` tokens, or
+`{ "dark": ..., "light": ... }` pair that follows the terminal live (flip your
+terminal's appearance and sideye re-themes). A theme is a full set of `#rrggbb` tokens, or
 `{ "base": <name>, ... }` that inherits another theme and overrides only the
 tokens you name. Its `"syntax"` is a bundled Shiki theme name, or an object
 overriding individual tokens (`keyword`, `string`, ...).
