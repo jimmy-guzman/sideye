@@ -2,12 +2,13 @@
 
 import { createCliRenderer } from "@opentui/core";
 import { render } from "@opentui/solid";
-import { Effect } from "effect";
+import { Effect, ManagedRuntime } from "effect";
 import { batch } from "solid-js";
 
 import packageJson from "../package.json";
 import { App } from "./App";
 import { helpText, parseArgs } from "./cli";
+import { Config, ConfigLive } from "./config/service";
 import { initialCheckerState } from "./diagnostics/checker";
 import type { GitModel } from "./git/model";
 import { Git } from "./git/service";
@@ -15,7 +16,8 @@ import { defaultExpandedDirectories, expandAncestorsForPath } from "./git/tree";
 import { Process } from "./process";
 import { runtime } from "./runtime";
 import { state } from "./state";
-import { setThemeMode } from "./theme/mode";
+import { setAppearance, setSelection } from "./theme/active";
+import { hasTheme, registerThemes, resolveThemes, selectThemeName } from "./theme/registry";
 
 try {
   const options = parseArgs(Bun.argv.slice(2));
@@ -64,13 +66,37 @@ try {
     return { changed, mainWorktreePath, repoRoot, sessionBase };
   });
 
+  // Load the config on its own runtime, before the app runtime's first use warms
+  // The diff highlighter: the active theme must be set before that warm-up reads
+  // It. ConfigLive has no dependencies, so this builds nothing heavy.
+  const configRuntime = ManagedRuntime.make(ConfigLive);
+  const { config, issues: configIssues } = await configRuntime.runPromise(
+    Effect.gen(function* loadConfig() {
+      return yield* (yield* Config).load();
+    }),
+  );
+  await configRuntime.dispose();
+
   // Create the renderer up front and detect the terminal's dark/light appearance
   // Before the first runtime use (which warms the diff highlighter), so the whole
   // App themes to match. Detection is a bounded terminal query; a terminal that
   // Does not answer within the timeout falls back to dark. The same renderer is
   // Reused for the first paint below, so detection costs no extra frame.
   const renderer = await createCliRenderer({ exitOnCtrlC: false });
-  setThemeMode((await renderer.waitForThemeMode(100)) ?? "dark");
+  const appearance = (await renderer.waitForThemeMode(100)) ?? "dark";
+
+  // Register the configured themes and seed the reactive theme state before the
+  // App runtime warms the highlighter. Selection + appearance feed the active
+  // Theme; a selection naming an unknown theme falls back to the built-in and is
+  // Reported. The renderer's theme_mode event updates appearance live (App.tsx).
+  const { themes, issues: themeIssues } = resolveThemes(config.themes ?? {});
+  registerThemes(themes);
+  setSelection(config.theme);
+  setAppearance(appearance);
+  const activeName = selectThemeName(config.theme, appearance);
+  if (!hasTheme(activeName)) {
+    themeIssues.push(`theme "${activeName}" not found; using the ${appearance} default`);
+  }
 
   const { changed, mainWorktreePath, repoRoot, sessionBase } = await runtime.runPromise(startup);
 
@@ -99,6 +125,12 @@ try {
     state.setCheckerState(initialCheckerState(model.changed));
   });
   void state.runChecks(model);
+
+  // A bad config never blocks startup; the first issue surfaces as a notice.
+  const issues = [...configIssues, ...themeIssues];
+  if (issues.length > 0) {
+    state.notify(issues[0] ?? "config has issues");
+  }
 
   // OpenTUI's exitOnCtrlC only calls renderer.destroy(), never process.exit, so
   // The background git poll keeps the event loop alive and the process lags

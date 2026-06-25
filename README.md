@@ -165,6 +165,33 @@ a problem to jump to it. Clicks also work in the overlays: a go-to-file or
 search result, or a worktree to switch to. Clicking a pane focuses it, and the
 wheel scrolls whichever pane the pointer is over.
 
+## Configuration
+
+Optional, at `~/.config/sideye/config.jsonc` (`$XDG_CONFIG_HOME` is honored;
+`config.json` also works). Without it, sideye follows your terminal's light/dark.
+A malformed or invalid config never blocks startup: it falls back to defaults and
+shows a notice.
+
+Define themes under `themes` and pick one with `theme`: a single name, or a
+`{ "dark": ..., "light": ... }` pair that follows the terminal live (flip your
+terminal's appearance and sideye re-themes). A theme is a full set of `#rrggbb` tokens, or
+`{ "base": <name>, ... }` that inherits another theme and overrides only the
+tokens you name. Its `"syntax"` is a bundled Shiki theme name, or an object
+overriding individual tokens (`keyword`, `string`, ...).
+
+```jsonc
+{
+  // follow the terminal, with a custom theme on each side
+  "theme": { "dark": "my-dark", "light": "my-light" },
+  "themes": {
+    "my-dark": { "base": "dark", "accent": { "primary": "#ffa7d9" } },
+    "my-light": { "base": "light", "accent": { "primary": "#b4267a" } },
+    "mocha": { "base": "dark", "syntax": "catppuccin-mocha" }, // sideye chrome, Catppuccin code
+    "tweaked": { "base": "dark", "syntax": { "keyword": "#ff8800" } }, // one token changed
+  },
+}
+```
+
 ## Requirements
 
 - git
