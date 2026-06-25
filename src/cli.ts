@@ -13,15 +13,15 @@ export interface DiffScope {
 }
 
 export interface CliOptions {
-  scope: DiffScope;
   editor: string | undefined;
-  ide: string | undefined;
   help: boolean;
-  version: boolean;
   icons: boolean;
+  ide: string | undefined;
   lspDownload: boolean;
   /** Long line handling: `scroll` (default) or `wrap`. */
   overflow: "scroll" | "wrap";
+  scope: DiffScope;
+  version: boolean;
 }
 
 // Templates for editors whose line-number argument format is known.
@@ -56,12 +56,12 @@ export function resolveEditorTemplate(explicit: string | undefined): string {
     return explicit;
   }
 
-  const sideye = process.env["SIDEYE_EDITOR"];
+  const sideye = process.env.SIDEYE_EDITOR;
   if (sideye !== undefined && sideye !== "") {
     return sideye;
   }
 
-  const env = process.env["EDITOR"] ?? process.env["VISUAL"];
+  const env = process.env.EDITOR ?? process.env.VISUAL;
   if (env !== undefined && env !== "") {
     const bin = basename(env.split(/\s+/)[0] ?? env);
     return KNOWN_EDITOR_TEMPLATES[bin] ?? `${env} +{line} {file}`;
@@ -86,13 +86,13 @@ export function resolveIdeTemplate(explicit: string | undefined): string | undef
     return explicit;
   }
 
-  const sideye = process.env["SIDEYE_IDE"];
+  const sideye = process.env.SIDEYE_IDE;
   if (sideye !== undefined && sideye !== "") {
     return sideye;
   }
 
-  const visual = process.env["VISUAL"];
-  const editor = process.env["EDITOR"];
+  const visual = process.env.VISUAL;
+  const editor = process.env.EDITOR;
   if (visual !== undefined && visual !== "" && visual !== editor) {
     const bin = basename(visual.split(/\s+/)[0] ?? visual);
     return KNOWN_EDITOR_TEMPLATES[bin] ?? `${visual} {file}:{line}`;
@@ -133,7 +133,7 @@ export function parseArgs(args: string[]): CliOptions {
   let ide: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
-    const arg = args[i]!;
+    const arg = args[i];
 
     if (arg === "--no-icons") {
       icons = false;

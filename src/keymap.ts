@@ -19,7 +19,7 @@ import { nextFindingPath, orderedFindingPaths } from "./ui-helpers";
  */
 interface HostEffects {
   quit: () => void;
-  openInEditor: (path: string, line: number | undefined, mode: "terminal" | "ide") => void;
+  openInEditor: (path: string, line: number | undefined, mode: "terminal" | "ide") => Promise<void>;
 }
 
 // One handler routes every key through the modal-precedence chain

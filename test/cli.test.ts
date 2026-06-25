@@ -215,50 +215,50 @@ describe("resolveEditorTemplate", () => {
   });
 
   test("explicit value (CLI flag or config) beats SIDEYE_EDITOR", () => {
-    const saved = process.env["SIDEYE_EDITOR"];
-    process.env["SIDEYE_EDITOR"] = "nano +{line} {file}";
+    const saved = process.env.SIDEYE_EDITOR;
+    process.env.SIDEYE_EDITOR = "nano +{line} {file}";
     try {
       expect(resolveEditorTemplate("nvim +{line} {file}")).toBe("nvim +{line} {file}");
     } finally {
       if (saved !== undefined) {
-        process.env["SIDEYE_EDITOR"] = saved;
+        process.env.SIDEYE_EDITOR = saved;
       } else {
-        delete process.env["SIDEYE_EDITOR"];
+        delete process.env.SIDEYE_EDITOR;
       }
     }
   });
 
   test("SIDEYE_EDITOR is returned verbatim — full template for a non-known editor is not mangled", () => {
-    const saved = process.env["SIDEYE_EDITOR"];
-    process.env["SIDEYE_EDITOR"] = "emacsclient -nw +{line} {file}";
+    const saved = process.env.SIDEYE_EDITOR;
+    process.env.SIDEYE_EDITOR = "emacsclient -nw +{line} {file}";
     try {
       expect(resolveEditorTemplate(undefined)).toBe("emacsclient -nw +{line} {file}");
     } finally {
       if (saved !== undefined) {
-        process.env["SIDEYE_EDITOR"] = saved;
+        process.env.SIDEYE_EDITOR = saved;
       } else {
-        delete process.env["SIDEYE_EDITOR"];
+        delete process.env.SIDEYE_EDITOR;
       }
     }
   });
 
   test("SIDEYE_EDITOR beats $EDITOR", () => {
-    const savedSideye = process.env["SIDEYE_EDITOR"];
-    const savedEditor = process.env["EDITOR"];
-    process.env["SIDEYE_EDITOR"] = "hx {file}:{line}";
-    process.env["EDITOR"] = "vim";
+    const savedSideye = process.env.SIDEYE_EDITOR;
+    const savedEditor = process.env.EDITOR;
+    process.env.SIDEYE_EDITOR = "hx {file}:{line}";
+    process.env.EDITOR = "vim";
     try {
       expect(resolveEditorTemplate(undefined)).toBe("hx {file}:{line}");
     } finally {
       if (savedSideye !== undefined) {
-        process.env["SIDEYE_EDITOR"] = savedSideye;
+        process.env.SIDEYE_EDITOR = savedSideye;
       } else {
-        delete process.env["SIDEYE_EDITOR"];
+        delete process.env.SIDEYE_EDITOR;
       }
       if (savedEditor !== undefined) {
-        process.env["EDITOR"] = savedEditor;
+        process.env.EDITOR = savedEditor;
       } else {
-        delete process.env["EDITOR"];
+        delete process.env.EDITOR;
       }
     }
   });
@@ -271,52 +271,52 @@ describe("resolveIdeTemplate", () => {
 
   test("returns undefined when nothing is configured", () => {
     const saved = {
-      EDITOR: process.env["EDITOR"],
-      SIDEYE_IDE: process.env["SIDEYE_IDE"],
-      VISUAL: process.env["VISUAL"],
+      EDITOR: process.env.EDITOR,
+      SIDEYE_IDE: process.env.SIDEYE_IDE,
+      VISUAL: process.env.VISUAL,
     };
-    delete process.env["SIDEYE_IDE"];
-    delete process.env["VISUAL"];
-    delete process.env["EDITOR"];
+    delete process.env.SIDEYE_IDE;
+    delete process.env.VISUAL;
+    delete process.env.EDITOR;
     try {
       expect(resolveIdeTemplate(undefined)).toBeUndefined();
     } finally {
       if (saved.SIDEYE_IDE !== undefined) {
-        process.env["SIDEYE_IDE"] = saved.SIDEYE_IDE;
+        process.env.SIDEYE_IDE = saved.SIDEYE_IDE;
       }
       if (saved.VISUAL !== undefined) {
-        process.env["VISUAL"] = saved.VISUAL;
+        process.env.VISUAL = saved.VISUAL;
       }
       if (saved.EDITOR !== undefined) {
-        process.env["EDITOR"] = saved.EDITOR;
+        process.env.EDITOR = saved.EDITOR;
       }
     }
   });
 
   test("uses SIDEYE_IDE env var over $VISUAL", () => {
-    const saved = process.env["SIDEYE_IDE"];
-    process.env["SIDEYE_IDE"] = "zed {file}:{line}";
+    const saved = process.env.SIDEYE_IDE;
+    process.env.SIDEYE_IDE = "zed {file}:{line}";
     try {
       expect(resolveIdeTemplate(undefined)).toBe("zed {file}:{line}");
     } finally {
       if (saved !== undefined) {
-        process.env["SIDEYE_IDE"] = saved;
+        process.env.SIDEYE_IDE = saved;
       } else {
-        delete process.env["SIDEYE_IDE"];
+        delete process.env.SIDEYE_IDE;
       }
     }
   });
 
   test("explicit value wins over SIDEYE_IDE", () => {
-    const saved = process.env["SIDEYE_IDE"];
-    process.env["SIDEYE_IDE"] = "zed {file}:{line}";
+    const saved = process.env.SIDEYE_IDE;
+    process.env.SIDEYE_IDE = "zed {file}:{line}";
     try {
       expect(resolveIdeTemplate("subl {file}:{line}")).toBe("subl {file}:{line}");
     } finally {
       if (saved !== undefined) {
-        process.env["SIDEYE_IDE"] = saved;
+        process.env.SIDEYE_IDE = saved;
       } else {
-        delete process.env["SIDEYE_IDE"];
+        delete process.env.SIDEYE_IDE;
       }
     }
   });
