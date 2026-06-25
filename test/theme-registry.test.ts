@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
 import { darkTheme } from "../src/theme/dark";
-import { resolveThemes, selectThemeName, themeForName } from "../src/theme/registry";
+import {
+  registerThemes,
+  resolveThemes,
+  selectThemeName,
+  themeForName,
+  themeNames,
+} from "../src/theme/registry";
 
 describe("themeForName", () => {
   test("returns a built-in by name", () => {
@@ -25,6 +31,21 @@ describe("selectThemeName", () => {
   test("a pair follows the appearance", () => {
     expect(selectThemeName({ dark: "a", light: "b" }, "dark")).toBe("a");
     expect(selectThemeName({ dark: "a", light: "b" }, "light")).toBe("b");
+  });
+});
+
+describe("themeNames", () => {
+  test("includes the built-ins", () => {
+    expect(themeNames()).toContain("dark");
+    expect(themeNames()).toContain("light");
+  });
+
+  test("lists registered themes after the built-ins", () => {
+    registerThemes(resolveThemes({ "registry-probe": { base: "dark" } }).themes);
+    const names = themeNames();
+
+    expect(names).toContain("registry-probe");
+    expect(names.indexOf("dark")).toBeLessThan(names.indexOf("registry-probe"));
   });
 });
 

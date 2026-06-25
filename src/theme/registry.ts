@@ -38,6 +38,12 @@ export function hasTheme(name: string) {
   return registry.has(name);
 }
 
+// Built-ins first (`dark`, `light`), then user themes in registration order; `Map`
+// Preserves insertion order, which is the order the switcher lists them in.
+export function themeNames() {
+  return [...registry.keys()];
+}
+
 export function selectThemeName(selection: ThemeSelection, appearance: "dark" | "light") {
   if (selection === undefined) {
     return appearance;
