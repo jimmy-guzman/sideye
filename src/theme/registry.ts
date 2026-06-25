@@ -63,6 +63,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  */
 export function resolveThemes(raw: Record<string, unknown>): ResolvedThemes {
   const resolved = new Map<string, RegisteredTheme>();
+  const failed = new Set<string>();
   const issues: string[] = [];
 
   const tokensOf = (name: string, candidate: unknown) =>
@@ -87,6 +88,9 @@ export function resolveThemes(raw: Record<string, unknown>): ResolvedThemes {
     if (cached !== undefined) {
       return cached;
     }
+    if (failed.has(name)) {
+      return undefined;
+    }
     const entry = raw[name];
     if (entry === undefined) {
       // Not a user theme: a built-in is the only other source (used by `base`).
@@ -94,41 +98,43 @@ export function resolveThemes(raw: Record<string, unknown>): ResolvedThemes {
     }
     if (stack.includes(name)) {
       issues.push(`theme "${name}" has a circular base`);
+      failed.add(name);
       return undefined;
     }
     if (!isPlainObject(entry)) {
-      tokensOf(name, entry);
+      tokensOf(name, entry); // Decode reports why a non-object entry isn't a theme
+      failed.add(name);
       return undefined;
     }
 
-    const base = typeof entry.base === "string" ? resolve(entry.base, [...stack, name]) : undefined;
-    if (typeof entry.base === "string" && base === undefined) {
-      issues.push(`theme "${name}": base "${entry.base}" not found`);
+    const { base: baseName, syntax: syntaxValue, ...uiTokens } = entry;
+
+    const base = typeof baseName === "string" ? resolve(baseName, [...stack, name]) : undefined;
+    if (typeof baseName === "string" && base === undefined) {
+      issues.push(`theme "${name}": base "${baseName}" not found`);
+      failed.add(name);
       return undefined;
     }
 
-    const value = entry.syntax;
     let syntaxTheme: string | undefined;
     let overrides: Record<string, unknown> = {};
-    if (typeof value === "string") {
-      syntaxTheme = bundledOr(name, value);
-    } else if (isPlainObject(value)) {
-      overrides = value;
-    } else if (value === undefined) {
+    if (typeof syntaxValue === "string") {
+      syntaxTheme = bundledOr(name, syntaxValue);
+    } else if (isPlainObject(syntaxValue)) {
+      overrides = syntaxValue;
+    } else if (syntaxValue === undefined) {
       syntaxTheme = base?.syntaxTheme;
     } else {
       issues.push(`theme "${name}": syntax must be a bundled theme name or a token map`);
     }
 
-    const uiTokens = { ...entry };
-    delete uiTokens.base;
-    delete uiTokens.syntax;
     const mergedUi = base === undefined ? uiTokens : mergeDeep(base.tokens, uiTokens);
     const syntax = mergeDeep(base?.tokens.syntax ?? darkTheme.syntax, overrides);
     const candidate = isPlainObject(mergedUi) ? { ...mergedUi, syntax } : mergedUi;
 
     const tokens = tokensOf(name, candidate);
     if (tokens === undefined) {
+      failed.add(name);
       return undefined;
     }
     const record: RegisteredTheme = { syntaxTheme, tokens };

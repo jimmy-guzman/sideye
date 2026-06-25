@@ -95,6 +95,17 @@ describe("resolveThemes", () => {
     expect(issues[0]).toContain("nope");
   });
 
+  test("an invalid shared base is reported once, not per referrer", () => {
+    const { issues, themes } = resolveThemes({
+      a: { base: "bad" },
+      b: { base: "bad" },
+      bad: { accent: { primary: "oops" } },
+    });
+
+    expect(themes.size).toBe(0);
+    expect(issues.filter((issue) => issue.startsWith('theme "bad":'))).toHaveLength(1);
+  });
+
   test("reports a circular base", () => {
     const { issues, themes } = resolveThemes({ a: { base: "b" }, b: { base: "a" } });
 
