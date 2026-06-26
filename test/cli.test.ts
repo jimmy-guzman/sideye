@@ -61,9 +61,7 @@ describe("parseArgs", () => {
   });
 
   test("accepts --ide as a separate argument", () => {
-    expect(parseArgs(["--ide", "code --goto {file}:{line}"]).ide).toBe(
-      "code --goto {file}:{line}",
-    );
+    expect(parseArgs(["--ide", "code --goto {file}:{line}"]).ide).toBe("code --goto {file}:{line}");
   });
 
   test("accepts --ide= inline syntax", () => {
@@ -83,11 +81,11 @@ describe("parseArgs", () => {
   });
 
   test("throws when --editor has no value", () => {
-    expect(() => parseArgs(["--editor"])).toThrow("--editor requires a value");
+    expect(() => parseArgs(["--editor"])).toThrow("--editor requires a non-empty value");
   });
 
   test("throws when --ide has no value", () => {
-    expect(() => parseArgs(["--ide"])).toThrow("--ide requires a value");
+    expect(() => parseArgs(["--ide"])).toThrow("--ide requires a non-empty value");
   });
 
   test("editor defaults to undefined when not provided", () => {
@@ -188,8 +186,11 @@ describe("buildEditorCommand", () => {
     ]);
   });
 
-  test("keeps {file}:{line} args with no line by dropping the whole arg", () => {
-    expect(buildEditorCommand("hx {file}:{line}", "/repo/src/foo.ts", undefined)).toEqual(["hx"]);
+  test("keeps {file} in combined {file}:{line} token when no line is provided", () => {
+    expect(buildEditorCommand("hx {file}:{line}", "/repo/src/foo.ts", undefined)).toEqual([
+      "hx",
+      "/repo/src/foo.ts",
+    ]);
   });
 
   test("handles a template with no {line} placeholder when line is undefined", () => {

@@ -43,13 +43,14 @@ const KNOWN_EDITOR_TEMPLATES: Record<string, string> = {
 
 /**
  * Resolves the editor command template from (in priority order):
- *   1. An explicit `--editor` value passed on the CLI
- *   2. The `SIDEYE_EDITOR` environment variable (returned as-is, no heuristic)
- *   3. `$EDITOR` / `$VISUAL`, with a known-editor heuristic for the line arg format
- *   4. `vim` as the hard fallback
  *
- * The returned string is a whitespace-separated command template where
- * `{file}` and `{line}` are substituted by `buildEditorCommand`.
+ * 1. An explicit `--editor` value passed on the CLI
+ * 2. The `SIDEYE_EDITOR` environment variable (returned as-is, no heuristic)
+ * 3. `$EDITOR` / `$VISUAL`, with a known-editor heuristic for the line arg format
+ * 4. `vim` as the hard fallback
+ *
+ * The returned string is a whitespace-separated command template where `{file}` and `{line}` are
+ * substituted by `buildEditorCommand`.
  */
 export function resolveEditorTemplate(explicit: string | undefined): string {
   if (explicit !== undefined) {
@@ -72,11 +73,12 @@ export function resolveEditorTemplate(explicit: string | undefined): string {
 
 /**
  * Resolves the IDE command template from (in priority order):
- *   1. An explicit `--ide` value passed on the CLI
- *   2. The `SIDEYE_IDE` environment variable
- *   3. `$VISUAL` when it differs from `$EDITOR` (Unix convention: $VISUAL is
- *      often a GUI editor while $EDITOR is a terminal one)
- *   4. `undefined` — if nothing is configured the E key does nothing
+ *
+ * 1. An explicit `--ide` value passed on the CLI
+ * 2. The `SIDEYE_IDE` environment variable
+ * 3. `$VISUAL` when it differs from `$EDITOR` (Unix convention: $VISUAL is often a GUI editor while
+ *    $EDITOR is a terminal one)
+ * 4. `undefined` — if nothing is configured the E key does nothing
  *
  * The returned string uses the same `{file}` / `{line}` placeholder format as
  * `resolveEditorTemplate`.
@@ -106,16 +108,25 @@ export function resolveIdeTemplate(explicit: string | undefined): string | undef
  *
  * - `{file}` is replaced with the absolute file path.
  * - `{line}` is replaced with the line number.
- * - Any argument that contains `{line}` but has no line number available is
- *   dropped entirely, so e.g. `+{line}` is omitted rather than becoming `+`.
+ * - When `line` is undefined and a token contains `{line}` but also `{file}` (e.g. `{file}:{line}`),
+ *   the `{line}` portion is stripped so the file path is still passed. Tokens that contain only
+ *   `{line}` (e.g. `+{line}`) are dropped entirely.
  */
-export function buildEditorCommand(template: string, file: string, line: number | undefined): string[] {
+export function buildEditorCommand(
+  template: string,
+  file: string,
+  line: number | undefined,
+): string[] {
   return template
     .split(/\s+/)
     .filter((arg) => arg !== "")
     .flatMap((arg) => {
       if (arg.includes("{line}") && line === undefined) {
-        return [];
+        if (!arg.includes("{file}")) {
+          return [];
+        }
+        const stripped = arg.replace(/:\{line\}|\{line\}/g, "").replace(/\{file\}/g, file);
+        return stripped !== "" ? [stripped] : [];
       }
       return [arg.replace(/\{file\}/g, file).replace(/\{line\}/g, String(line ?? ""))];
     });
@@ -171,28 +182,36 @@ export function parseArgs(args: string[]): CliOptions {
     }
 
     if (arg.startsWith("--editor=")) {
-      editor = arg.slice("--editor=".length);
+      const value = arg.slice("--editor=".length);
+      if (value.trim() === "") {
+        throw new Error("--editor requires a non-empty value");
+      }
+      editor = value;
       continue;
     }
 
     if (arg === "--editor") {
       const value = args[++i];
-      if (value === undefined) {
-        throw new Error("--editor requires a value");
+      if (value === undefined || value.trim() === "") {
+        throw new Error("--editor requires a non-empty value");
       }
       editor = value;
       continue;
     }
 
     if (arg.startsWith("--ide=")) {
-      ide = arg.slice("--ide=".length);
+      const value = arg.slice("--ide=".length);
+      if (value.trim() === "") {
+        throw new Error("--ide requires a non-empty value");
+      }
+      ide = value;
       continue;
     }
 
     if (arg === "--ide") {
       const value = args[++i];
-      if (value === undefined) {
-        throw new Error("--ide requires a value");
+      if (value === undefined || value.trim() === "") {
+        throw new Error("--ide requires a non-empty value");
       }
       ide = value;
       continue;
@@ -290,14 +309,14 @@ Options:
       heuristics for the line arg format), then vim.
 
   --ide <template>
-      Command template for a GUI / IDE (E key). Spawns the process and
+      Command template for a GUI / IDE (o key). Spawns the process and
       returns immediately; the renderer stays live in its pane.
       Examples:
         --ide "code --goto {file}:{line}"
         --ide "zed {file}:{line}"
         --ide "subl {file}:{line}"
       Falls back to SIDEYE_IDE, then $VISUAL when it differs from $EDITOR.
-      If nothing is configured, E does nothing.
+      If nothing is configured, o does nothing.
 
 Keys:
   tab        switch focus between the file tree and the viewer

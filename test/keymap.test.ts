@@ -21,7 +21,7 @@ const keyEvent = (overrides: { ctrl?: boolean; name: string }) =>
   });
 
 describe("createKeyHandler", () => {
-  const noop = () => {};
+  const noop = async () => {};
 
   afterEach(() => {
     state.setSelectedPath(undefined);
@@ -49,7 +49,7 @@ describe("createKeyHandler", () => {
     batch(() => state.setSelectedPath("src/foo.ts"));
     const calls: [string, number | undefined, string][] = [];
     const handle = createKeyHandler({
-      openInEditor: (path, line, mode) => {
+      openInEditor: async (path, line, mode) => {
         calls.push([path, line, mode]);
       },
       quit: noop,
@@ -63,7 +63,7 @@ describe("createKeyHandler", () => {
   test("e does nothing when no file is selected", () => {
     const calls: unknown[] = [];
     const handle = createKeyHandler({
-      openInEditor: (...args) => {
+      openInEditor: async (...args) => {
         calls.push(args);
       },
       quit: noop,
@@ -78,7 +78,7 @@ describe("createKeyHandler", () => {
     batch(() => state.setSelectedPath("src/bar.ts"));
     const calls: [string, number | undefined, string][] = [];
     const handle = createKeyHandler({
-      openInEditor: (path, line, mode) => {
+      openInEditor: async (path, line, mode) => {
         calls.push([path, line, mode]);
       },
       quit: noop,
@@ -92,7 +92,7 @@ describe("createKeyHandler", () => {
   test("o does nothing when no file is selected", () => {
     const calls: unknown[] = [];
     const handle = createKeyHandler({
-      openInEditor: (...args) => {
+      openInEditor: async (...args) => {
         calls.push(args);
       },
       quit: noop,

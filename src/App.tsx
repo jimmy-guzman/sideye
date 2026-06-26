@@ -2,13 +2,10 @@ import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import type { ThemeMode } from "@opentui/core";
-import {
-  useKeyboard,
-  useRenderer,
-  useTerminalDimensions,
-} from "@opentui/solid";
+import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid";
 import { createEffect, onCleanup, Show } from "solid-js";
 
+import { buildEditorCommand } from "./cli";
 import { HeaderBar } from "./components/HeaderBar";
 import { HelpOverlay } from "./components/HelpOverlay";
 import { Palette } from "./components/Palette";
@@ -20,7 +17,6 @@ import { StatusBar } from "./components/StatusBar";
 import { ThemeSwitcher } from "./components/ThemeSwitcher";
 import { Viewer } from "./components/Viewer";
 import { WorktreePicker } from "./components/WorktreePicker";
-import { buildEditorCommand } from "./cli";
 import type { Worktree } from "./git/model";
 import { createKeyHandler } from "./keymap";
 import { state } from "./state";
@@ -89,13 +85,8 @@ export function App() {
     }
     // The main worktree survives and isn't where we already are: switch to it.
     if (main !== "" && main !== root && existsSync(main)) {
-      const cached = state
-        .worktrees()
-        ?.find((worktree) => worktree.path === main);
-      const label =
-        cached === undefined
-          ? (main.split("/").pop() ?? main)
-          : worktreeLabel(cached);
+      const cached = state.worktrees()?.find((worktree) => worktree.path === main);
+      const label = cached === undefined ? (main.split("/").pop() ?? main) : worktreeLabel(cached);
       const target: Worktree = cached ?? {
         bare: false,
         detached: false,
@@ -104,10 +95,7 @@ export function App() {
         path: main,
         prunable: false,
       };
-      void state.switchWorktree(
-        target,
-        `worktree deleted, switched to ${label}`,
-      );
+      void state.switchWorktree(target, `worktree deleted, switched to ${label}`);
       return;
     }
     // Nothing recoverable: the repository itself is gone.
@@ -119,8 +107,7 @@ export function App() {
     line: number | undefined,
     mode: "terminal" | "ide",
   ) {
-    const template =
-      mode === "ide" ? state.ideTemplate() : state.editorTemplate();
+    const template = mode === "ide" ? state.ideTemplate() : state.editorTemplate();
     if (template === undefined) {
       state.notify("no IDE configured — set 'ide' in config or use --ide");
       return;
@@ -141,29 +128,30 @@ export function App() {
         });
         await proc.exited;
       } catch (error) {
-        state.notify(
-          error instanceof Error ? error.message : "failed to open editor",
-        );
+        state.notify(error instanceof Error ? error.message : "failed to open editor");
       } finally {
         renderer.resume();
       }
     } else {
       try {
-        Bun.spawn(argv, {
+        const proc = Bun.spawn(argv, {
           cwd: state.gitModel().repoRoot,
-          stderr: "inherit",
-          stdin: "inherit",
-          stdout: "inherit",
+          stderr: "ignore",
+          stdin: "ignore",
+          stdout: "ignore",
+        });
+        void proc.exited.then((code) => {
+          if (code !== 0) {
+            state.notify(`IDE exited with code ${String(code)}`);
+          }
         });
       } catch (error) {
-        state.notify(
-          error instanceof Error ? error.message : "failed to open IDE",
-        );
+        state.notify(error instanceof Error ? error.message : "failed to open IDE");
       }
     }
   }
 
-  useKeyboard(createKeyHandler({ quit, openInEditor }));
+  useKeyboard(createKeyHandler({ openInEditor, quit }));
 
   return (
     <box
