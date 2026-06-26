@@ -894,19 +894,23 @@ function createState() {
           const repoFilesTriggers = yield* Queue.sliding<void>(1);
 
           const refreshChanged = Git.use((git) => git.changedFiles(root, scopeNow)).pipe(
+            // Functional update so the merge is always against the latest committed
+            // Model: the repoFiles drain runs concurrently, so reasoning about which
+            // Write lands first is unnecessary when each merges from the current state.
             Effect.tap((next) =>
-              Effect.sync(() => {
-                const prev = gitModel();
-                if (prev.repoRoot !== root) {
-                  return;
-                }
-                // Only re-list the whole repo when the file set actually shifted;
-                // A content-only edit leaves the tree structure untouched.
-                if (changedPathsDiffer(prev.changed, next.changed)) {
-                  Queue.offerUnsafe(repoFilesTriggers, undefined);
-                }
-                setGitModel(mergeChanged(prev, next));
-              }),
+              Effect.sync(() =>
+                setGitModel((prev) => {
+                  if (prev.repoRoot !== root) {
+                    return prev;
+                  }
+                  // Only re-list the whole repo when the file set actually shifted;
+                  // A content-only edit leaves the tree structure untouched.
+                  if (changedPathsDiffer(prev.changed, next.changed)) {
+                    Queue.offerUnsafe(repoFilesTriggers, undefined);
+                  }
+                  return mergeChanged(prev, next);
+                }),
+              ),
             ),
             // Last-commit's right side is the literal HEAD (it always follows the
             // Newest commit), but its parent must re-resolve as HEAD moves so a new
@@ -942,16 +946,13 @@ function createState() {
           );
           const refreshRepoFiles = Git.use((git) => git.repoFiles(root)).pipe(
             Effect.tap((next) =>
-              Effect.sync(() => {
-                const prev = gitModel();
-                if (prev.repoRoot === root && prev.repoFilesKey !== next.repoFilesKey) {
-                  setGitModel({
-                    ...prev,
-                    repoFiles: next.repoFiles,
-                    repoFilesKey: next.repoFilesKey,
-                  });
-                }
-              }),
+              Effect.sync(() =>
+                setGitModel((prev) =>
+                  prev.repoRoot === root && prev.repoFilesKey !== next.repoFilesKey
+                    ? { ...prev, repoFiles: next.repoFiles, repoFilesKey: next.repoFilesKey }
+                    : prev,
+                ),
+              ),
             ),
             Effect.ignore,
           );

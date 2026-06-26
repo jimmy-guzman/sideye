@@ -27,12 +27,14 @@ test("renders the shell before any model is seeded", async () => {
     height: 24,
     width: 100,
   });
-  const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+  try {
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
-  // The status bar's quit hint is part of the always-present chrome, so it proves
-  // The shell painted even with no files to show.
-  const frame = await settleUntil("shell", (current) => current.includes("q quit"));
-  expect(frame).toContain("q quit");
-
-  renderer.destroy();
+    // The status bar's quit hint is part of the always-present chrome, so it proves
+    // The shell painted even with no files to show.
+    const frame = await settleUntil("shell", (current) => current.includes("q quit"));
+    expect(frame).toContain("q quit");
+  } finally {
+    renderer.destroy();
+  }
 });
