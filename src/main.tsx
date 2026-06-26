@@ -77,6 +77,14 @@ try {
   );
   await configRuntime.dispose();
 
+  // Register the configured themes and seed the theme selection *before* the
+  // Renderer enters the alt-screen, so a config-validation throw still lands on
+  // The normal terminal rather than a torn-down one. These need neither the
+  // Renderer nor the detected appearance; appearance is applied just below.
+  const { themes, issues: themeIssues } = resolveThemes(config.themes ?? {});
+  registerThemes(themes);
+  setSelection(config.theme);
+
   // Create the renderer up front and detect the terminal's dark/light appearance
   // Before the first runtime use (which warms the diff highlighter), so the whole
   // App themes to match. Detection is a bounded terminal query; a terminal that
@@ -108,13 +116,11 @@ try {
   process.on("uncaughtException", crash);
   process.on("unhandledRejection", crash);
 
-  // Register the configured themes and seed the reactive theme state before the
-  // App runtime warms the highlighter. Selection + appearance feed the active
-  // Theme; a selection naming an unknown theme falls back to the built-in and is
-  // Reported. The renderer's theme_mode event updates appearance live (App.tsx).
-  const { themes, issues: themeIssues } = resolveThemes(config.themes ?? {});
-  registerThemes(themes);
-  setSelection(config.theme);
+  // Apply the detected appearance and validate the active theme name. Both need
+  // The renderer's appearance and are non-throwing, so running them after the
+  // Alt-screen is entered leaves no window for a blank-on-error. Selection +
+  // Appearance together feed the active theme before the first runtime use warms
+  // The highlighter; the renderer's theme_mode event updates appearance live.
   setAppearance(appearance);
   const activeName = selectThemeName(config.theme, appearance);
   if (!hasTheme(activeName)) {
