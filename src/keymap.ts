@@ -5,7 +5,6 @@ import { scopeKinds } from "./cli";
 import { formatCopyReference } from "./clipboard/reference";
 import { isNavigableProblemItem } from "./diagnostics/problems";
 import { latestActivity } from "./git/activity";
-import { lineReference } from "./git/patch";
 import { firstFileInNode } from "./git/tree";
 import { state } from "./state";
 import { nextFindingPath, orderedFindingPaths } from "./ui-helpers";
@@ -100,6 +99,22 @@ export function createKeyHandler(host: HostEffects) {
           );
         } else if (key.name === "up" || (key.ctrl && key.name === "p")) {
           state.setPaletteIndex(Math.max(state.paletteIndex() - 1, 0));
+        }
+        return;
+      }
+
+      // The theme picker owns the keyboard while open (like the palette): nav here
+      // Previews live, text/submit are the input's job. Escape reverts to the
+      // Theme open captured; enter (the input's onSubmit) commits the highlighted one.
+      if (state.themeOpen()) {
+        if (key.name === "escape") {
+          state.closeThemePicker(false);
+        } else if (key.name === "down" || (key.ctrl && key.name === "n")) {
+          state.setThemeIndex(
+            Math.min(state.themeIndex() + 1, Math.max(0, state.themeResults().length - 1)),
+          );
+        } else if (key.name === "up" || (key.ctrl && key.name === "p")) {
+          state.setThemeIndex(Math.max(state.themeIndex() - 1, 0));
         }
         return;
       }
@@ -244,6 +259,14 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
+      if (key.name === "t") {
+        // Solid mounts and focuses the picker's filter input within this same key
+        // Event, so without preventDefault the triggering "t" would be typed into it.
+        key.preventDefault();
+        state.openThemePicker();
+        return;
+      }
+
       if (key.name === "c") {
         const current = state.changesOnly();
         state.setChangesOnly(!current);
@@ -311,11 +334,20 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "y" && selectedPath !== undefined) {
-        const line = state.navigableLines()[state.cursorIndex()];
-        const reference =
-          line === undefined ? { path: selectedPath } : lineReference(selectedPath, line);
-        state.copy(formatCopyReference(reference));
+      if (key.name === "y") {
+        if (state.focusedPane() === "tree") {
+          const row = state.treeRows()[state.focusedRowIndex()];
+          if (row !== undefined) {
+            state.copy(formatCopyReference({ path: row.node.path }));
+          }
+          return;
+        }
+        if (selectedPath !== undefined) {
+          const line = state.navigableLines()[state.cursorIndex()];
+          state.copy(
+            formatCopyReference({ line: line?.newLine ?? line?.oldLine, path: selectedPath }),
+          );
+        }
         return;
       }
 

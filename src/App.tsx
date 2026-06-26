@@ -17,6 +17,7 @@ import { ScopePicker } from "./components/ScopePicker";
 import { SearchPanel } from "./components/SearchPanel";
 import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
+import { ThemeSwitcher } from "./components/ThemeSwitcher";
 import { Viewer } from "./components/Viewer";
 import { WorktreePicker } from "./components/WorktreePicker";
 import { buildEditorCommand } from "./cli";
@@ -193,6 +194,9 @@ export function App() {
       </Show>
       <Show when={state.scopeOpen()}>
         <ScopePicker />
+      </Show>
+      <Show when={state.themeOpen()}>
+        <ThemeSwitcher />
       </Show>
       <Show when={state.helpOpen()}>
         <HelpOverlay />

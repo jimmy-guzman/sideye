@@ -329,13 +329,14 @@ Anywhere:
   s          open the scope picker (unstaged/staged/all/session/last commit)
   e          open in terminal editor (suspends TUI, --editor template)
   o          open in GUI / IDE (renderer stays live, --ide template)
+  t          open the theme switcher (filter, preview live, enter applies)
   c          toggle changes-only filter for the tree
   v          toggle diff <-> full file view
   z          toggle long-line wrap in the viewer
   p          toggle the problems panel
   .          jump to the most recently changed file
   f          load full content when truncated
-  y          copy path:line + snippet at the cursor
+  y          copy the focused file's path (tree) or path:line (viewer)
   n          jump to next file with findings
   r          re-run checks
   q/escape   quit
