@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.1](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.3.0...sideye-v0.3.1) (2026-06-26)
+
+
+### Features
+
+* **viewer:** ✨ add ability to open in editors ([#109](https://github.com/jimmy-guzman/sideye/issues/109)) ([02e0198](https://github.com/jimmy-guzman/sideye/commit/02e019873fd59e9e090f1cd786d62a66de8d802c))
+
+
+### Bug Fixes
+
+* **viewer:** 🐛 pin non-wrap diff rows to one terminal row ([#120](https://github.com/jimmy-guzman/sideye/issues/120)) ([9cb966b](https://github.com/jimmy-guzman/sideye/commit/9cb966b8e6276836a4f4033ab0d7f19b86d769b0))
+
 ## [0.3.0](https://github.com/jimmy-guzman/sideye/compare/sideye-v0.2.10...sideye-v0.3.0) (2026-06-26)
 
 
