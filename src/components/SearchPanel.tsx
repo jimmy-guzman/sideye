@@ -66,6 +66,7 @@ export function SearchPanel() {
         backgroundColor={theme.colors.surface.panel}
         focusedBackgroundColor={theme.colors.surface.panel}
         textColor={theme.colors.text.primary}
+        focusedTextColor={theme.colors.text.primary}
         cursorColor={theme.colors.accent.primary}
         onInput={onInput}
         onSubmit={onSubmit}
