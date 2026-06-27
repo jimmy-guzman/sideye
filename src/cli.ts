@@ -195,7 +195,7 @@ export function scopePickerLabel(kind: ScopeKind) {
 }
 
 export function helpText() {
-  return `sideye - read-only companion TUI for CLI coding agents
+  return `sideye - read-only companion TUI with IDE-grade insight into agent changes
 
 Usage:
   sideye

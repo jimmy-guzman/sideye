@@ -1,7 +1,6 @@
 # sideye
 
-`sideye` is a read-only terminal UI for watching a repo while a CLI coding agent
-changes it.
+`sideye` is a read-only companion TUI with IDE-grade insight into agent changes.
 
 The usual workflow is awkward. The agent is in one terminal pane, but you still
 open an editor just to answer basic questions:
