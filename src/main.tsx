@@ -7,7 +7,7 @@ import { batch } from "solid-js";
 
 import packageJson from "../package.json";
 import { App } from "./App";
-import { helpText, parseArgs } from "./cli";
+import { helpText, parseCommand } from "./cli";
 import { Config, ConfigLive } from "./config/service";
 import { initialCheckerState } from "./diagnostics/checker";
 import { resolveEditorTemplate, resolveIdeTemplate } from "./editor/reference";
@@ -19,9 +19,16 @@ import { runtime } from "./runtime";
 import { state } from "./state";
 import { setAppearance, setSelection } from "./theme/active";
 import { hasTheme, registerThemes, resolveThemes, selectThemeName } from "./theme/registry";
+import { runUpgrade } from "./upgrade/run";
 
 try {
-  const options = parseArgs(Bun.argv.slice(2));
+  const command = parseCommand(Bun.argv.slice(2));
+
+  if (command.kind === "upgrade") {
+    process.exit(await runUpgrade({ execPath: process.execPath }));
+  }
+
+  const options = command.options;
 
   if (options.help) {
     console.log(helpText());

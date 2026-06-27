@@ -22,6 +22,28 @@ export interface CliOptions {
   version: boolean;
 }
 
+export type Command = { kind: "run"; options: CliOptions } | { kind: "upgrade" };
+
+/**
+ * Splits the reserved `upgrade` subcommand from the default TUI invocation before `parseArgs` runs,
+ * so the "single positional = git ref" grammar never has to disambiguate it. `upgrade` takes no
+ * further arguments.
+ */
+export function parseCommand(args: string[]): Command {
+  if (args[0] !== "upgrade") {
+    return { kind: "run", options: parseArgs(args) };
+  }
+
+  const extra = args[1];
+  if (extra !== undefined) {
+    throw new Error(
+      extra.startsWith("-") ? `Unknown option: ${extra}` : `Unexpected argument: ${extra}`,
+    );
+  }
+
+  return { kind: "upgrade" };
+}
+
 export function parseArgs(args: string[]): CliOptions {
   let kind: ScopeKind = "all";
   let help = false;
@@ -185,6 +207,14 @@ Usage:
   sideye --wrap            (wrap long lines in the viewer instead of overflowing)
   sideye --editor <template>
   sideye --ide <template>
+  sideye upgrade           (self-update to the latest release)
+
+Commands:
+  upgrade
+      Update sideye to the latest release using the channel it was installed
+      through: a standalone install re-runs the install script, an npm install
+      runs npm, and a Homebrew install runs brew upgrade. If the install
+      channel cannot be determined, it prints the upgrade commands instead.
 
 Options:
   --editor <template>
