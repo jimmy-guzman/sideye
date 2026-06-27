@@ -1,0 +1,25 @@
+import { describe, expect, test } from "bun:test";
+
+import { upgradeInvocation } from "../src/upgrade/commands";
+
+describe("upgradeInvocation", () => {
+  test("standalone re-runs the install script", () => {
+    expect(upgradeInvocation("standalone")?.argv).toEqual([
+      "bash",
+      "-c",
+      "curl -fsSL https://raw.githubusercontent.com/jimmy-guzman/sideye/main/install.sh | bash",
+    ]);
+  });
+
+  test("npm installs the latest published version", () => {
+    expect(upgradeInvocation("npm")?.argv).toEqual(["npm", "install", "-g", "sideye@latest"]);
+  });
+
+  test("brew upgrades the tap formula", () => {
+    expect(upgradeInvocation("brew")?.argv).toEqual(["brew", "upgrade", "jimmy-guzman/tap/sideye"]);
+  });
+
+  test("unknown has no command", () => {
+    expect(upgradeInvocation("unknown")).toBeUndefined();
+  });
+});

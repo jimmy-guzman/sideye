@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { helpText, parseArgs, scopeKinds, scopeLabel, scopePickerLabel } from "../src/cli";
+import {
+  helpText,
+  parseArgs,
+  parseCommand,
+  scopeKinds,
+  scopeLabel,
+  scopePickerLabel,
+} from "../src/cli";
 
 describe("parseArgs", () => {
   test("defaults to all changes vs HEAD", () => {
@@ -89,6 +96,33 @@ describe("parseArgs", () => {
 
   test("rejects unknown options", () => {
     expect(() => parseArgs(["--nope"])).toThrow("Unknown option: --nope");
+  });
+});
+
+describe("parseCommand", () => {
+  test("dispatches the upgrade subcommand", () => {
+    expect(parseCommand(["upgrade"])).toEqual({ kind: "upgrade" });
+  });
+
+  test("rejects an extra argument after upgrade", () => {
+    expect(() => parseCommand(["upgrade", "0.4.1"])).toThrow("Unexpected argument: 0.4.1");
+  });
+
+  test("rejects an unknown flag after upgrade", () => {
+    expect(() => parseCommand(["upgrade", "--force"])).toThrow("Unknown option: --force");
+  });
+
+  test("falls through to the run command for everything else", () => {
+    expect(parseCommand(["--staged", "main"])).toEqual({
+      kind: "run",
+      options: parseArgs(["--staged", "main"]),
+    });
+  });
+
+  test("treats a bare ref as a run command", () => {
+    const command = parseCommand(["main"]);
+    expect(command.kind).toBe("run");
+    expect(command.kind === "run" && command.options.scope).toEqual({ kind: "all", ref: "main" });
   });
 });
 
