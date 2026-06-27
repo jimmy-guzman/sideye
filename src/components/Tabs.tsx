@@ -27,7 +27,7 @@ export function Tabs() {
   const theme = useTheme();
   const isDoubleClick = createDoubleClickGuard();
 
-  // Active = selected (on the cursor bg); otherwise a changed file's label is
+  // Active = selected (on the body surface); otherwise a changed file's label is
   // Tinted by its kind, like the tree, leaving unchanged files muted. The preview
   // (ephemeral) tab is signalled by italic instead, freeing the color channel so
   // A previewed changed file still shows its diff tint.
@@ -112,7 +112,11 @@ export function Tabs() {
             // OpenTUI text selection (a stray highlight); the strip is chrome,
             // Not content (mirrors Sidebar's focusable ref).
             ref={(el) => (el.selectable = false)}
-            backgroundColor={cell().active ? theme.colors.surface.cursor : undefined}
+            // Depth: the active tab matches the viewer body (base), so it reads as
+            // Raised/connected to the content, while the inactive tabs sit on the
+            // Darker panel surface and recede. Panel is darker than base in both
+            // Themes (cursor would invert in dark), so the active always pops.
+            backgroundColor={cell().active ? theme.colors.surface.base : theme.colors.surface.panel}
             onMouseDown={() =>
               batch(() => {
                 state.activateTab(cell().id);
