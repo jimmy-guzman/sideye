@@ -56,7 +56,9 @@ export function Viewer() {
   });
 
   // Deferred jumps (problem/recency navigation): land on the line, un-truncate,
-  // Or escalate to file view to find it.
+  // Or escalate to file view to find it. A jump sets both `jumpTarget` and (via
+  // SelectFile) `pendingRestore`; this effect must stay declared after the restore
+  // Effect above so it runs last and the jump's line wins over the restored cursor.
   createEffect(() => {
     const jump = state.jumpTarget();
     if (jump === undefined || jump.path !== state.selectedPath()) {

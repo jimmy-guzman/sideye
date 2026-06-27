@@ -4,6 +4,7 @@ import { batch } from "solid-js";
 
 import type { GitModel } from "../src/git/model";
 import { state } from "../src/state";
+import { recall } from "../src/viewer/navigation";
 
 function modelWith(paths: string[]): GitModel {
   return {
@@ -54,6 +55,19 @@ test("selectFile builds history that goBack and goForward walk", () => {
 
   state.goForward();
   expect(state.selectedPath()).toBe("b.ts");
+});
+
+test("leaving a file whose restore is still pending records the intended position, not stale live scroll", () => {
+  seed(["a.ts", "b.ts", "c.ts"]);
+  state.selectFile("b.ts");
+  // The Viewer restore effect never runs under the bare state singleton, so b's
+  // PendingRestore stays outstanding and the live scroll still holds the previous
+  // File's value; capture must use the pending viewport, not this stray 99.
+  state.setViewerScrollTop(99);
+
+  state.selectFile("c.ts");
+
+  expect(recall(state.navState(), "b.ts")?.viewport.scrollTop).toBe(0);
 });
 
 test("opening a file after going back truncates the forward history", () => {

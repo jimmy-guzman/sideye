@@ -408,6 +408,12 @@ function createState() {
     runtime
       .runPromise(loadDiffView(src), { signal })
       .then(({ highlight, view }) => {
+        // The controller can abort after the load resolved but before this
+        // Microtask drains; committing then would paint a stale snapshot over the
+        // Fresh one. Mirror the phase-2 guard so only the live selection lands.
+        if (signal.aborted) {
+          return;
+        }
         setDiffView(view);
         // Phase 2: highlight off the critical path, then swap in colored rows
         // (structure-identical) only if this exact phase-1 snapshot is still
@@ -641,19 +647,27 @@ function createState() {
 
   // Snapshot the live viewer state for the path being left, so a later
   // Back/forward restores the exact spot. Undefined when nothing is selected.
+  // A still-outstanding restore for this path means the cursor/scroll signals
+  // Have not been applied for it yet (they still hold the previous file's values
+  // While its diff loads); capture the intended restore instead of those stale
+  // Live signals, so rapid navigation never records a neighbor's position.
   function captureCurrent(): Location | undefined {
     const path = selectedPath();
     if (path === undefined) {
       return undefined;
     }
+    const pending = pendingRestore();
+    const settled = pending === undefined || pending.path !== path;
     const line = navigableLines()[cursorIndex()];
     return {
-      cursorLine: line?.newLine ?? line?.oldLine,
+      cursorLine: settled ? (line?.newLine ?? line?.oldLine) : pending.cursorLine,
       fileView: fileView(),
       fullContent: fullContentPaths().has(path),
       kind: currentLocation(navState())?.kind ?? "jump",
       path,
-      viewport: { scrollTop: viewerScrollTop(), scrollX: viewerScrollX() },
+      viewport: settled
+        ? { scrollTop: viewerScrollTop(), scrollX: viewerScrollX() }
+        : pending.viewport,
     };
   }
 
