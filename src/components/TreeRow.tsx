@@ -8,8 +8,13 @@ import { state } from "../state";
 import { useTheme } from "../theme/context";
 import { kindLetter } from "../ui-helpers";
 import { lerpHex } from "../utils/color";
+import { createDoubleClickGuard } from "../utils/double-click";
 import { fileIcon, folderIcon, symlinkIcon } from "../utils/file-icon";
 import { truncate, truncateName } from "../utils/text";
+
+// Shared across rows (each is its own component instance), so a double-click on
+// The same file row pins it, mirroring the tab strip's double-click gesture.
+const isDoubleFileClick = createDoubleClickGuard();
 
 // Fine-grained reactivity replaces React.memo: only the rows whose focus,
 // Selection, or checker state actually change re-evaluate.
@@ -23,15 +28,19 @@ export function TreeRow(props: { row: FileTreeRow }) {
   const contentWidth = () => state.sidebarWidth() - 4;
 
   // Clicking a row reproduces the keyboard outcome for that row: a file selects
-  // And opens (like `enter`); a directory moves the cursor there and toggles its
-  // Expansion (collapsing `l`/`h` into one click). stopPropagation keeps the
-  // Sidebar's focus-only handler from also firing for a row click.
+  // And opens (like `enter`), and double-clicking it pins it as a tab; a directory
+  // Moves the cursor there and toggles its expansion (collapsing `l`/`h` into one
+  // Click). stopPropagation keeps the Sidebar's focus-only handler from also
+  // Firing for a row click.
   const onMouseDown = (event: MouseEvent) => {
     event.stopPropagation();
     batch(() => {
       state.setFocusedPane("tree");
       if (node.type === "file") {
         state.selectFile(node.path);
+        if (isDoubleFileClick(node.path)) {
+          state.pinActiveTab();
+        }
         return;
       }
       state.setFocusedNodeId(node.id);

@@ -1,8 +1,10 @@
+import { createTextAttributes } from "@opentui/core";
 import { batch, createMemo, Index, Show } from "solid-js";
 
 import type { ChangeKind } from "../git/model";
 import { state } from "../state";
 import { useTheme } from "../theme/context";
+import { createDoubleClickGuard } from "../utils/double-click";
 import { truncateLeft, truncateName } from "../utils/text";
 
 // The active tab shows its path (truncated from the left to keep the filename);
@@ -23,18 +25,18 @@ function baseName(path: string) {
 // Active tab is always shown however narrow the viewer.
 export function Tabs() {
   const theme = useTheme();
+  const isDoubleClick = createDoubleClickGuard();
 
-  // Active = selected (on the cursor bg); preview = faint (ephemeral); otherwise a
-  // Changed file's label is tinted by its kind, like the tree, leaving unchanged
-  // Files muted.
-  const labelColor = (cell: { active: boolean; preview: boolean; kind: ChangeKind | undefined }) =>
+  // Active = selected (on the cursor bg); otherwise a changed file's label is
+  // Tinted by its kind, like the tree, leaving unchanged files muted. The preview
+  // (ephemeral) tab is signalled by italic instead, freeing the color channel so
+  // A previewed changed file still shows its diff tint.
+  const labelColor = (cell: { active: boolean; kind: ChangeKind | undefined }) =>
     cell.active
       ? theme.colors.text.selected
-      : cell.preview
-        ? theme.colors.text.faint
-        : cell.kind !== undefined
-          ? theme.colors.kind[cell.kind]
-          : theme.colors.text.muted;
+      : cell.kind !== undefined
+        ? theme.colors.kind[cell.kind]
+        : theme.colors.text.muted;
 
   const layout = createMemo(() => {
     const changed = state.gitModel().changedByPath;
@@ -111,9 +113,20 @@ export function Tabs() {
             // Not content (mirrors Sidebar's focusable ref).
             ref={(el) => (el.selectable = false)}
             backgroundColor={cell().active ? theme.colors.surface.cursor : undefined}
-            onMouseDown={() => batch(() => state.activateTab(cell().id))}
+            onMouseDown={() =>
+              batch(() => {
+                state.activateTab(cell().id);
+                if (isDoubleClick(cell().id)) {
+                  state.pinActiveTab();
+                }
+              })
+            }
           >
-            <text ref={(el) => (el.selectable = false)} fg={labelColor(cell())}>
+            <text
+              ref={(el) => (el.selectable = false)}
+              fg={labelColor(cell())}
+              attributes={createTextAttributes({ italic: cell().preview })}
+            >
               {` ${cell().label} `}
             </text>
           </box>

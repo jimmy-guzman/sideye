@@ -812,6 +812,12 @@ function createState() {
     });
   }
 
+  // Pin-only (idempotent): the double-click gesture promotes the active tab and
+  // Never unpins, unlike `ctrl-t`'s toggle. Unpinning stays a keyboard action.
+  function pinActiveTab() {
+    setNavState((nav) => pinTab(nav, nav.activeTabId));
+  }
+
   function cycleTab(direction: number) {
     switchActiveTab((nav) => (direction > 0 ? nextTab(nav) : prevTab(nav)));
   }
@@ -1435,6 +1441,7 @@ function createState() {
     paletteWidth,
     paneHeight,
     pendingRestore,
+    pinActiveTab,
     problemIndex,
     problems,
     problemsOpen,

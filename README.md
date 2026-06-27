@@ -87,12 +87,13 @@ supports. Unchanged files open read-only with no diff gutters, just the source.
 
 ### Browse, go back, and pin tabs
 
-Browsing the tree previews files in one calm view, so nothing piles up. `<` and
-`>` step back and forward through where you've been, restoring each spot's cursor
-and scroll. When you want to keep a file while you look at another, `ctrl-t` pins
-it as a tab (and `ctrl-t` again unpins it); `{` / `}` switch tabs and `ctrl-w`
-closes one. Each tab carries its own history and remembered position, and a tab's
-label is tinted by its diff status.
+Browsing the tree previews files in one calm view, so nothing piles up; the
+preview shows in italic to mark it as ephemeral. `<` and `>` step back and forward
+through where you've been, restoring each spot's cursor and scroll. When you want
+to keep a file while you look at another, `ctrl-t` pins it as a tab (and `ctrl-t`
+again unpins it), or double-click the tab or the file in the tree to pin it; `{` /
+`}` switch tabs and `ctrl-w` closes one. Each tab carries its own history and
+remembered position, and a tab's label is tinted by its diff status.
 
 ![tab strip with pinned, diff-status-tinted tabs and the active file](assets/screenshots/tabs.png)
 
@@ -196,7 +197,8 @@ Press `?` anytime to see the full list in the app:
 
 The keyboard drives everything, but the mouse works too. Click a file to open
 it, a folder to expand or collapse it, a diff line to move the cursor there, or
-a problem to jump to it. Clicks also work in the overlays: a go-to-file or
+a problem to jump to it. Double-click a file in the tree, or a tab in the strip,
+to pin it as a tab. Clicks also work in the overlays: a go-to-file or
 search result, a worktree to switch to, or a theme to apply (hovering a theme
 previews it live). Clicking a pane focuses it, and the wheel scrolls whichever
 pane the pointer is over.

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { createTextAttributes } from "@opentui/core";
 import { createMockMouse } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 
@@ -138,6 +139,138 @@ describe("tabs strip", () => {
       await mouse.doubleClick(diffCol + 1, diffRow);
       await renderOnce();
       expect(renderer.getSelection()).not.toBeNull();
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
+  test("double-clicking a preview tab pins it", async () => {
+    const body = Array.from({ length: 20 }, (_, index) => `const line${index + 1} = ${index + 1}`);
+    const repoRoot = createFixtureRepo("sideye-tabpin-", {
+      "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
+      "src/a.ts": `${body.join("\n")}\n`,
+      "src/b.ts": `${body.join("\n")}\n`,
+    });
+    writeFileSync(
+      join(repoRoot, "src", "a.ts"),
+      `const aChanged = true\n${body.slice(1).join("\n")}\n`,
+    );
+    writeFileSync(
+      join(repoRoot, "src", "b.ts"),
+      `const bChanged = true\n${body.slice(1).join("\n")}\n`,
+    );
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame, mockInput, mockMouse } = await testRender(
+      () => <App />,
+      { height: 30, width: 120 },
+    );
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("diff view", (frame) => /ln \d/.test(frame), 5);
+      // Pin a.ts, then preview b.ts so the strip shows [a.ts][src/b.ts].
+      state.selectFile("src/a.ts");
+      mockInput.pressKey("t", { ctrl: true });
+      state.selectFile("src/b.ts");
+      const frame = await settleUntil("two tabs", (f) => f.includes("src/b.ts"));
+
+      const bTab = () => state.tabItems().find((tab) => tab.path === "src/b.ts");
+      expect(bTab()?.preview).toBe(true);
+
+      // Double-click the active preview tab's label to pin it.
+      const lines = frame.split("\n");
+      const rowIndex = lines.findIndex((line) => line.includes("src/b.ts"));
+      const column = lines[rowIndex].indexOf("src/b.ts");
+      await mockMouse.doubleClick(column + 1, rowIndex);
+      await renderOnce();
+
+      expect(bTab()?.preview).toBe(false);
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
+  test("double-clicking a file in the tree pins it as a tab", async () => {
+    const repoRoot = createFixtureRepo("sideye-treepin-", {
+      "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
+      "src/a.ts": "const a = 1\n",
+      "src/b.ts": "const b = 1\n",
+    });
+    writeFileSync(join(repoRoot, "src", "b.ts"), "const bChanged = 1\n");
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame, mockMouse } = await testRender(() => <App />, {
+      height: 24,
+      width: 100,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      const frame = await settleUntil("tree", (f) => f.includes("b.ts"));
+
+      // Locate the b.ts row in the sidebar (left of the pane border).
+      const sidebar = frame.split("\n").map((line) => line.split("││")[0]);
+      const rowIndex = sidebar.findIndex((line) => line.includes("b.ts"));
+      const column = sidebar[rowIndex].indexOf("b.ts");
+      expect(column).toBeGreaterThan(0);
+
+      await mockMouse.doubleClick(column + 1, rowIndex);
+      await settleUntil("b.ts pinned", () => {
+        const tab = state.tabItems().find((item) => item.path === "src/b.ts");
+        return tab !== undefined && !tab.preview;
+      });
+
+      const tab = state.tabItems().find((item) => item.path === "src/b.ts");
+      expect(tab?.preview).toBe(false);
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
+
+  test("the preview tab renders italic, pinned tabs upright", async () => {
+    const repoRoot = createFixtureRepo("sideye-tabitalic-", {
+      "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
+      "src/a.ts": "const a = 1\n",
+      "src/b.ts": "const b = 1\n",
+    });
+    writeFileSync(join(repoRoot, "src", "a.ts"), "const aChanged = 1\n");
+    writeFileSync(join(repoRoot, "src", "b.ts"), "const bChanged = 1\n");
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
+      height: 24,
+      width: 100,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("diff view", (frame) => /ln \d/.test(frame), 5);
+      // Pin a.ts, preview b.ts -> strip shows the pinned a.ts and the preview b.ts.
+      state.selectFile("src/a.ts");
+      mockInput.pressKey("t", { ctrl: true });
+      state.selectFile("src/b.ts");
+      const frame = await settleUntil("two tabs", (f) => f.includes("src/b.ts"));
+      await renderOnce();
+
+      // Read the actual rendered cell attributes (what the terminal paints).
+      const italic = createTextAttributes({ italic: true });
+      const buffer = renderer.currentRenderBuffer;
+      const attributeAt = (x: number, y: number) => buffer.buffers.attributes[y * buffer.width + x];
+
+      const lines = frame.split("\n");
+      const row = lines.findIndex((line) => line.includes("src/b.ts"));
+      const previewCol = lines[row].indexOf("b.ts");
+      const pinnedCol = lines[row].indexOf("a.ts");
+
+      expect(attributeAt(previewCol, row) & italic).toBe(italic);
+      expect(attributeAt(pinnedCol, row) & italic).toBe(0);
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });
