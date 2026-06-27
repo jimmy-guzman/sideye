@@ -76,6 +76,9 @@ export function pinTab(nav: NavState, id: string): NavState {
 // Revert a pinned tab to the preview, discarding any other (ephemeral) preview so
 // At most one remains. The reverted tab keeps its history and stays active.
 export function unpinTab(nav: NavState, id: string): NavState {
+  if (!nav.tabs.some((tab) => tab.id === id)) {
+    return nav;
+  }
   const flipped = nav.tabs.map((tab) => (tab.id === id ? { ...tab, preview: true } : tab));
   return { ...nav, tabs: flipped.filter((tab) => tab.id === id || !tab.preview) };
 }
@@ -147,12 +150,14 @@ export function forward(nav: NavState): NavState {
 // Append a tab seeded with `location` and make it active. The caller supplies the
 // Id (state owns the counter) and whether it is a preview tab; switching off the
 // Previous tab is the caller's job (recordCurrent), the same capture-on-leave the
-// Back/forward actions do.
+// Back/forward actions do. A new preview tab drops any existing one, so the
+// At-most-one-preview invariant holds regardless of the caller.
 export function openTab(nav: NavState, location: Location, id: string, preview: boolean): NavState {
+  const tabs = preview ? nav.tabs.filter((tab) => !tab.preview) : nav.tabs;
   return {
     ...nav,
     activeTabId: id,
-    tabs: [...nav.tabs, { entries: [location], id, index: 0, preview }],
+    tabs: [...tabs, { entries: [location], id, index: 0, preview }],
   };
 }
 

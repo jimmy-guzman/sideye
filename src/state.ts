@@ -646,8 +646,9 @@ function createState() {
     if (path === undefined) {
       return undefined;
     }
+    const line = navigableLines()[cursorIndex()];
     return {
-      cursorLine: navigableLines()[cursorIndex()]?.newLine,
+      cursorLine: line?.newLine ?? line?.oldLine,
       fileView: fileView(),
       fullContent: fullContentPaths().has(path),
       kind: currentLocation(navState())?.kind ?? "jump",
@@ -734,7 +735,7 @@ function createState() {
       return;
     }
     const leaving = captureCurrent();
-    const moved = back(leaving === undefined ? nav : recordCurrent(nav, leaving));
+    const moved = back(recordLeaving(nav, leaving));
     const target = currentLocation(moved);
     batch(() => {
       setNavState(moved);
@@ -750,7 +751,7 @@ function createState() {
       return;
     }
     const leaving = captureCurrent();
-    const moved = forward(leaving === undefined ? nav : recordCurrent(nav, leaving));
+    const moved = forward(recordLeaving(nav, leaving));
     const target = currentLocation(moved);
     batch(() => {
       setNavState(moved);
@@ -810,7 +811,8 @@ function createState() {
   // So no location change and nothing to restore.
   function closeActiveTab() {
     const nav = navState();
-    const moved = closeTab(nav, nav.activeTabId);
+    const leaving = captureCurrent();
+    const moved = closeTab(recordLeaving(nav, leaving), nav.activeTabId);
     if (moved.tabs.length === nav.tabs.length) {
       setNavState(moved);
       return;

@@ -30,7 +30,9 @@ export function Viewer() {
     const found =
       pending.cursorLine === undefined
         ? lines.findIndex((line) => line.type !== "context")
-        : lines.findIndex((line) => line.newLine === pending.cursorLine);
+        : lines.findIndex(
+            (line) => line.newLine === pending.cursorLine || line.oldLine === pending.cursorLine,
+          );
     const index =
       found !== -1
         ? found

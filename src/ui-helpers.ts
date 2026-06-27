@@ -19,6 +19,9 @@ export function viewerStats(
     return "";
   }
   const warnings = selectedFile.warnings.length === 0 ? "" : ` !${selectedFile.warnings.join(",")}`;
+  if (selectedFile.binary) {
+    return `binary${warnings}`;
+  }
   return `+${selectedFile.additions} -${selectedFile.deletions}${warnings}`;
 }
 

@@ -174,6 +174,18 @@ describe("preview / pin", () => {
     expect(previewTab(nav)?.id).toBe("1");
     expect(nav.tabs.filter((tab) => tab.preview)).toHaveLength(1);
   });
+
+  test("opening a new preview replaces the existing preview", () => {
+    const nav = openTab(initialNav(loc("a")), loc("b"), "1", true);
+    expect(nav.tabs).toHaveLength(1);
+    expect(previewTab(nav)?.id).toBe("1");
+  });
+
+  test("closeTab and unpinTab are no-ops for an unknown id", () => {
+    const nav = initialNav(loc("a"));
+    expect(closeTab(nav, "nope")).toEqual(nav);
+    expect(unpinTab(nav, "nope")).toEqual(nav);
+  });
 });
 
 describe("tabs", () => {

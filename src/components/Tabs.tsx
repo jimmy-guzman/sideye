@@ -66,12 +66,19 @@ export function Tabs() {
       cells.findIndex((cell) => cell.active),
     );
     const budget = Math.max(8, state.terminalWidth() - state.sidebarWidth() - 4 - RIGHT_RESERVE);
+    const last = cells.length - 1;
+    // A clipped side shows a ‹ / › glyph (one column each), so a candidate window
+    // Must fit its own width plus the markers it would still leave on; expanding to
+    // An edge drops that side's marker and frees its column.
+    const markers = (from: number, to: number) => (from > 0 ? 1 : 0) + (to < last ? 1 : 0);
     let start = active;
     let end = active;
     let used = cells[active].width;
     for (;;) {
-      const canRight = end < cells.length - 1 && used + cells[end + 1].width <= budget;
-      const canLeft = start > 0 && used + cells[start - 1].width <= budget;
+      const canRight =
+        end < last && used + cells[end + 1].width + markers(start, end + 1) <= budget;
+      const canLeft =
+        start > 0 && used + cells[start - 1].width + markers(start - 1, end) <= budget;
       if (!canRight && !canLeft) {
         break;
       }

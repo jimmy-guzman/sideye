@@ -44,6 +44,13 @@ describe("viewerStats", () => {
     expect(viewerStats(undefined, true, { kind: "binary" })).toBe("");
   });
 
+  test("diff view labels a binary file instead of zeroed counts", () => {
+    expect(viewerStats(changed({ binary: true }), false, undefined)).toBe("binary");
+    expect(viewerStats(changed({ binary: true, warnings: ["lfs"] }), false, undefined)).toBe(
+      "binary !lfs",
+    );
+  });
+
   test("no selected file in diff view has no stats", () => {
     expect(viewerStats(undefined, false, undefined)).toBe("");
   });
