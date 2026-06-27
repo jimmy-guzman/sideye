@@ -24,7 +24,7 @@ describe("createKeyHandler", () => {
   const noop = async () => {};
 
   afterEach(() => {
-    state.setSelectedPath(undefined);
+    state.seedNav(undefined);
   });
 
   test("ctrl-c quits", () => {
@@ -46,7 +46,7 @@ describe("createKeyHandler", () => {
   });
 
   test("e opens the selected file in terminal editor", () => {
-    batch(() => state.setSelectedPath("src/foo.ts"));
+    batch(() => state.seedNav("src/foo.ts"));
     const calls: [string, number | undefined, string][] = [];
     const handle = createKeyHandler({
       openInEditor: async (path, line, mode) => {
@@ -75,7 +75,7 @@ describe("createKeyHandler", () => {
   });
 
   test("o opens the selected file in IDE", () => {
-    batch(() => state.setSelectedPath("src/bar.ts"));
+    batch(() => state.seedNav("src/bar.ts"));
     const calls: [string, number | undefined, string][] = [];
     const handle = createKeyHandler({
       openInEditor: async (path, line, mode) => {
@@ -101,5 +101,17 @@ describe("createKeyHandler", () => {
     handle(keyEvent({ name: "o" }));
 
     expect(calls).toEqual([]);
+  });
+
+  test("< steps back and > steps forward through history", () => {
+    state.selectFile("a.ts");
+    state.selectFile("b.ts");
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+
+    handle(keyEvent({ name: "<" }));
+    expect(state.selectedPath()).toBe("a.ts");
+
+    handle(keyEvent({ name: ">" }));
+    expect(state.selectedPath()).toBe("b.ts");
   });
 });

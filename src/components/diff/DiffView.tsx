@@ -7,7 +7,7 @@ import {
   type TextRenderable,
 } from "@opentui/core";
 import { useRenderer } from "@opentui/solid";
-import { batch, createEffect, createMemo, Index, on, onCleanup, Show, untrack } from "solid-js";
+import { batch, createEffect, createMemo, Index, onCleanup, Show, untrack } from "solid-js";
 
 import { followScrollTop } from "../../diff/follow";
 import { isLineRow, type DiffLineRow, type DiffRow } from "../../diff/rows";
@@ -150,14 +150,8 @@ export function DiffView() {
   );
   const visibleRows = createMemo(() => rows().slice(window().start, window().end));
 
-  // Reset horizontal scroll when the file changes; clamp it when the range shrinks
-  // (terminal resize / shorter file).
-  createEffect(
-    on(
-      () => state.diffView()?.path,
-      () => setScrollX(0),
-    ),
-  );
+  // Clamp horizontal scroll when the range shrinks (terminal resize / shorter
+  // File). The reset-on-file-change is now owned by the viewer's pendingRestore.
   createEffect(() => {
     const max = maxScrollX();
     if (scrollX() > max) {

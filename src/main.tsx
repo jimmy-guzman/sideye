@@ -163,7 +163,7 @@ try {
         state.setRepoRoot(model.repoRoot);
         state.setMainWorktreePath(mainWorktreePath);
         state.setLastChange(Date.now());
-        state.setSelectedPath(initialSelectedPath);
+        state.seedNav(initialSelectedPath);
         state.setFocusedNodeId(
           initialSelectedPath === undefined ? "" : `file:${initialSelectedPath}`,
         );

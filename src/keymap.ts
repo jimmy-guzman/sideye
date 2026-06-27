@@ -289,6 +289,16 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
+      if (key.name === "<") {
+        state.goBack();
+        return;
+      }
+
+      if (key.name === ">") {
+        state.goForward();
+        return;
+      }
+
       const selectedPath = state.selectedPath();
 
       if (key.name === "v" && state.selectedFile() !== undefined && selectedPath !== undefined) {

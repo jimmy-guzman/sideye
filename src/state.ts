@@ -55,12 +55,37 @@ import { findMatches as findMatchIndices } from "./utils/find";
 import { rankFiles } from "./utils/fuzzy";
 import { refreshDelay } from "./utils/refresh-cadence";
 import { truncate } from "./utils/text";
+import {
+  back,
+  canBack,
+  canForward,
+  currentLocation,
+  forward,
+  initialNav,
+  navigate,
+  recall,
+  recordCurrent,
+  remember,
+  type Location,
+  type NavState,
+} from "./viewer/navigation";
 import { Watcher } from "./watcher/service";
 
 interface JumpTarget {
   path: string;
   line: number;
   escalate: boolean;
+}
+
+// A one-shot request to place the cursor and scroll once the diff for `path`
+// Has loaded: every navigation enqueues one (a fresh open carries
+// `cursorLine: undefined` -> first change; back/forward and revisits carry the
+// Remembered line). The Viewer applies it under the same async-coherence guard as
+// A jump, so "reset on file switch" is just restore-to-default through one path.
+interface PendingRestore {
+  path: string;
+  cursorLine: number | undefined;
+  viewport: { scrollTop: number; scrollX: number };
 }
 
 // The coherent diff-pane snapshot. A selection commits in two structure-identical
@@ -248,6 +273,12 @@ function createState() {
   // Scrollbox every frame (it stays the single source of truth for the window).
   const [viewerScrollTop, setViewerScrollTop] = createSignal(0);
   const [viewerScrollX, setViewerScrollX] = createSignal(0);
+  // The viewer's navigation history: tabs of visited Locations plus a per-path
+  // MRU viewport. `selectedPath`/`fileView`/the scroll signals stay the live
+  // Source of truth the viewer renders; navState records them on leave and
+  // Restores them on back/forward or a revisit (capture-on-leave, like a browser).
+  const [navState, setNavState] = createSignal<NavState>(initialNav(undefined));
+  const [pendingRestore, setPendingRestore] = createSignal<PendingRestore | undefined>(undefined);
   const [jumpTarget, setJumpTarget] = createSignal<JumpTarget | undefined>(undefined);
   const [checkerState, setCheckerState] = createSignal<CheckerState>(initialCheckerState([]));
   const [status, setStatus] = createSignal("");
@@ -583,6 +614,133 @@ function createState() {
     );
   });
 
+  // --- navigation ---
+  const canGoBack = createMemo(() => canBack(navState()));
+  const canGoForward = createMemo(() => canForward(navState()));
+
+  // Snapshot the live viewer state for the path being left, so a later
+  // Back/forward restores the exact spot. Undefined when nothing is selected.
+  function captureCurrent(): Location | undefined {
+    const path = selectedPath();
+    if (path === undefined) {
+      return undefined;
+    }
+    return {
+      cursorLine: navigableLines()[cursorIndex()]?.newLine,
+      fileView: fileView(),
+      fullContent: fullContentPaths().has(path),
+      kind: currentLocation(navState())?.kind ?? "jump",
+      path,
+      viewport: { scrollTop: viewerScrollTop(), scrollX: viewerScrollX() },
+    };
+  }
+
+  // The Location to arrive at when opening `path` fresh: a revisit restores its
+  // Remembered cursor/scroll from the MRU, a first visit defaults (first change,
+  // Top). `fileView` always resets to the diff, matching the prior selectFile.
+  function arrivingLocation(path: string, kind: "browse" | "jump"): Location {
+    const remembered = recall(navState(), path);
+    return {
+      cursorLine: remembered?.cursorLine,
+      fileView: false,
+      fullContent: fullContentPaths().has(path),
+      kind,
+      path,
+      viewport: remembered?.viewport ?? { scrollTop: 0, scrollX: 0 },
+    };
+  }
+
+  // Drive the live signals to a Location and enqueue its restore. The fullContent
+  // Set is additive (a path stays un-truncated globally); back never re-truncates.
+  function goToLocation(location: Location) {
+    setSelectedPath(location.path);
+    setFileView(location.fileView);
+    if (location.fullContent) {
+      setFullContentPaths((current) =>
+        current.has(location.path) ? current : new Set(current).add(location.path),
+      );
+    }
+    setPendingRestore({
+      cursorLine: location.cursorLine,
+      path: location.path,
+      viewport: location.viewport,
+    });
+  }
+
+  function navigateTo(path: string, kind: "browse" | "jump") {
+    const leaving = captureCurrent();
+    const arriving = arrivingLocation(path, kind);
+    batch(() => {
+      setNavState((nav) => {
+        const recorded = leaving === undefined ? nav : recordCurrent(nav, leaving);
+        const remembered =
+          leaving === undefined
+            ? recorded
+            : remember(recorded, leaving.path, {
+                cursorLine: leaving.cursorLine,
+                viewport: leaving.viewport,
+              });
+        return navigate(remembered, arriving);
+      });
+      goToLocation(arriving);
+    });
+  }
+
+  function goBack() {
+    const nav = navState();
+    if (!canBack(nav)) {
+      return;
+    }
+    const leaving = captureCurrent();
+    const moved = back(leaving === undefined ? nav : recordCurrent(nav, leaving));
+    const target = currentLocation(moved);
+    batch(() => {
+      setNavState(moved);
+      if (target !== undefined) {
+        goToLocation(target);
+      }
+    });
+  }
+
+  function goForward() {
+    const nav = navState();
+    if (!canForward(nav)) {
+      return;
+    }
+    const leaving = captureCurrent();
+    const moved = forward(leaving === undefined ? nav : recordCurrent(nav, leaving));
+    const target = currentLocation(moved);
+    batch(() => {
+      setNavState(moved);
+      if (target !== undefined) {
+        goToLocation(target);
+      }
+    });
+  }
+
+  // Reset history to a fresh single tab seeded with `path` (startup and worktree
+  // Switch). Caller already runs inside a batch; this stays unbatched so it folds
+  // Into that one update.
+  function seedNav(path: string | undefined) {
+    if (path === undefined) {
+      setNavState(initialNav(undefined));
+      setSelectedPath(undefined);
+      setFileView(false);
+      setPendingRestore(undefined);
+      return;
+    }
+    const location: Location = {
+      cursorLine: undefined,
+      fileView: false,
+      fullContent: false,
+      kind: "jump",
+      path,
+      viewport: { scrollTop: 0, scrollX: 0 },
+    };
+    setNavState(initialNav(location));
+    goToLocation(location);
+  }
+
   // --- actions ---
   function moveFocus(direction: number) {
     const rows = treeRows();
@@ -592,17 +750,15 @@ function createState() {
     }
     setFocusedNodeId(node.id);
     if (node.type === "file") {
-      setSelectedPath(node.path);
-      setFileView(false);
+      navigateTo(node.path, "browse");
     }
   }
 
   function selectFile(path: string) {
     batch(() => {
-      setSelectedPath(path);
       setFocusedNodeId(`file:${path}`);
-      setFileView(false);
       setExpandedDirectories((current) => expandAncestorsForPath(current, path));
+      navigateTo(path, "jump");
     });
   }
 
@@ -848,14 +1004,15 @@ function createState() {
         setLastChange(Date.now());
         setRepoRoot(fresh.repoRoot);
         setGitModel(fresh);
-        setSelectedPath(selected);
         setFocusedNodeId(selected === undefined ? "" : `file:${selected}`);
         setExpandedDirectories(
           selected === undefined ? expanded : expandAncestorsForPath(expanded, selected),
         );
         setFullContentPaths(new Set<string>());
-        setFileView(false);
         setJumpTarget(undefined);
+        // Reset navigation: worktree A's history is meaningless in B, so collapse
+        // To one fresh tab on the new worktree's selected file.
+        seedNav(selected);
         setProblemIndex(0);
         setActivityLog(emptyActivityLog);
         setFocusedPane("tree");
@@ -1100,6 +1257,8 @@ function createState() {
   return {
     activityLog,
     allProblemItems,
+    canGoBack,
+    canGoForward,
     changesOnly,
     checkerState,
     checksRunning,
@@ -1126,6 +1285,8 @@ function createState() {
     focusedRowIndex,
     fullContentPaths,
     gitModel,
+    goBack,
+    goForward,
     helpOpen,
     iconsEnabled,
     ideTemplate,
@@ -1134,6 +1295,7 @@ function createState() {
     loadWorktrees,
     mainWorktreePath,
     moveFocus,
+    navState,
     navigableLines,
     notify,
     now,
@@ -1147,6 +1309,7 @@ function createState() {
     paletteResults,
     paletteWidth,
     paneHeight,
+    pendingRestore,
     problemIndex,
     problems,
     problemsOpen,
@@ -1164,6 +1327,7 @@ function createState() {
     searchResults,
     searchScope,
     searchTruncated,
+    seedNav,
     selectFile,
     selectScope,
     selectedFile,
@@ -1197,6 +1361,7 @@ function createState() {
     setPaletteIndex,
     setPaletteOpen,
     setPaletteQuery,
+    setPendingRestore,
     setProblemIndex,
     setProblemsOpen,
     setRepoRoot,
@@ -1207,7 +1372,6 @@ function createState() {
     setSearchOpen,
     setSearchQuery,
     setSearchScope,
-    setSelectedPath,
     setSessionBase,
     setSidebarOpen,
     setStatus,

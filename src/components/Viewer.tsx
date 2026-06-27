@@ -1,5 +1,5 @@
 import type { InputRenderable } from "@opentui/core";
-import { batch, createEffect, createMemo, on, Show } from "solid-js";
+import { batch, createEffect, on, Show } from "solid-js";
 
 import { state } from "../state";
 import { useTheme } from "../theme/context";
@@ -10,17 +10,39 @@ export function Viewer() {
   const theme = useTheme();
   let findInputRef: InputRenderable | undefined;
 
-  // Reset the cursor to the first change only when the displayed file changes,
-  // Not on live edits of the same file. Keyed through a memo so it fires once per
-  // Path change, not on every diffView commit (the plain->highlighted upgrade
-  // Commits twice for the same path, and Solid's `on` does not value-dedupe).
-  const loadedPath = createMemo(() => state.diffView()?.path);
-  createEffect(
-    on(loadedPath, () => {
-      const first = state.navigableLines().findIndex((line) => line.type !== "context");
-      state.setCursorIndex(first === -1 ? 0 : first);
-    }),
-  );
+  // Apply a navigation's pending restore once the target diff has loaded under the
+  // Matching view intent (the same async-coherence guard a jump uses). A fresh
+  // Open carries `cursorLine: undefined` -> first change and a zero viewport, so
+  // "reset on file switch" is just restore-to-default; back/forward and revisits
+  // Carry a remembered line and viewport. This replaces the old per-path cursor
+  // Reset and DiffView's scrollX reset with one path.
+  createEffect(() => {
+    const pending = state.pendingRestore();
+    if (pending === undefined) {
+      return;
+    }
+    const view = state.diffView();
+    if (view?.path !== pending.path || view.showFileContent !== state.showFileContent()) {
+      return;
+    }
+    const lines = state.navigableLines();
+    const found =
+      pending.cursorLine === undefined
+        ? lines.findIndex((line) => line.type !== "context")
+        : lines.findIndex((line) => line.newLine === pending.cursorLine);
+    const index =
+      found !== -1
+        ? found
+        : pending.cursorLine === undefined
+          ? 0
+          : Math.max(0, nearestNavigableIndex(lines, pending.cursorLine));
+    batch(() => {
+      state.setCursorIndex(index);
+      state.setViewerScrollTop(pending.viewport.scrollTop);
+      state.setViewerScrollX(pending.viewport.scrollX);
+      state.setPendingRestore(undefined);
+    });
+  });
 
   // Clamp the cursor when a refresh shrinks the content under it.
   createEffect(() => {
