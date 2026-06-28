@@ -28,6 +28,11 @@ describe("help overlay", () => {
       const help = await settleUntil("help overlay", (frame) =>
         frame.includes("switch to another git worktree"),
       );
+      // Section headings group the list; assert ones no description text contains, so a
+      // Regression to a flat list (no headings) fails. Spread top/middle/bottom.
+      expect(help).toContain("navigation");
+      expect(help).toContain("workspace");
+      expect(help).toContain("layout");
       expect(help).toContain("go to file: fuzzy-search the whole repo");
       expect(help).toContain("toggle the file tree sidebar");
       expect(help).toContain("open in terminal editor");
