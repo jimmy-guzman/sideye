@@ -158,12 +158,13 @@ test("definition skips a server lacking the capability and selects the next", as
   });
 });
 
-test("definition degrades a server error to IntelRequestError", async () => {
+test("definition degrades a server error to IntelRequestError and still closes the document", async () => {
   await withRepo({ "src/a.ts": "const x = 1\n" }, async (dir) => {
+    const log: Recorded[] = [];
     const ts = handle(
       ["definition"],
       (method) => Effect.fail(new LspRequestError({ message: "boom", method })),
-      [],
+      log,
     );
 
     const error = await Effect.runPromise(
@@ -176,6 +177,12 @@ test("definition degrades a server error to IntelRequestError", async () => {
 
     expect(error).toBeInstanceOf(IntelRequestError);
     expect(error.method).toBe("textDocument/definition");
+    // The acquireRelease finalizer closes the document even though the request failed.
+    expect(log.map((entry) => entry.method)).toEqual([
+      "textDocument/didOpen",
+      "textDocument/definition",
+      "textDocument/didClose",
+    ]);
   });
 });
 

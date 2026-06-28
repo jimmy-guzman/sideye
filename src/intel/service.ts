@@ -90,9 +90,16 @@ export const IntelLive = Layer.effect(
             return [];
           }
           const uri = pathToFileURL(absolute).href;
-          yield* handle.connection.notify("textDocument/didOpen", {
-            textDocument: { languageId: lspLanguageId(path), text, uri, version: 1 },
-          });
+          // Open/close as one resource so the close is registered atomically with the open and runs
+          // On success, error, or interruption (no leak in the window before a finalizer installs).
+          // The connection is shared with the diagnostics pool, so a concurrent open of the same uri
+          // Can race this lifecycle; a per-uri refcount in the transport is the follow-up (see SPEC).
+          yield* Effect.acquireRelease(
+            handle.connection.notify("textDocument/didOpen", {
+              textDocument: { languageId: lspLanguageId(path), text, uri, version: 1 },
+            }),
+            () => handle.connection.notify("textDocument/didClose", { textDocument: { uri } }),
+          );
           const reply = yield* handle.connection
             .request(method, { position, textDocument: { uri }, ...extraParams })
             .pipe(
@@ -102,10 +109,6 @@ export const IntelLive = Layer.effect(
               ),
               Effect.catchTag("LspRequestError", (error) =>
                 Effect.fail(new IntelRequestError({ message: error.message, method })),
-              ),
-              // Close the document even when the request times out or the fiber is interrupted.
-              Effect.ensuring(
-                handle.connection.notify("textDocument/didClose", { textDocument: { uri } }),
               ),
             );
           // The reply's paths are absolute; the tree/viewer key off repo-relative paths (a target

@@ -1110,7 +1110,8 @@ function createState() {
       }
       // The service relativizes in-repo paths; an out-of-repo target (e.g. node_modules) stays
       // Absolute and the tree can't open it, so jump to the first in-repo result instead.
-      const target = locations.find((location) => !isAbsolute(location.path));
+      const inRepo = locations.filter((location) => !isAbsolute(location.path));
+      const target = inRepo[0];
       if (target === undefined) {
         notify("definition is outside the repo");
         return;
@@ -1125,8 +1126,8 @@ function createState() {
         });
         setFocusedPane("diff");
       });
-      if (locations.length > 1) {
-        notify(`${locations.length} definitions`);
+      if (inRepo.length > 1) {
+        notify(`${inRepo.length} definitions`);
       }
     } catch {
       if (!controller.signal.aborted) {
