@@ -55,7 +55,7 @@ function pushingHandle(items: unknown[]): ServerHandle {
     published: Effect.sync(() => published),
     request: () => Effect.succeed(null),
   };
-  return { connection, supportsPullDiagnostics: false };
+  return { capabilities: new Set(), connection };
 }
 
 // A server whose stdout has closed (it died): it never publishes and reports closed, so the settle
@@ -68,7 +68,7 @@ function deadHandle(): ServerHandle {
     published: Effect.sync(() => new Map<string, unknown[]>()),
     request: () => Effect.succeed(null),
   };
-  return { connection, supportsPullDiagnostics: false };
+  return { capabilities: new Set(), connection };
 }
 
 function collectUpdates(

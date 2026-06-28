@@ -382,6 +382,13 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
+      // Go to definition of the symbol under the caret (IDE-standard F12). The action reads the
+      // Caret from state and guards itself, so it's safe to dispatch globally.
+      if (key.name === "f12" && !key.shift) {
+        void state.goToDefinition();
+        return;
+      }
+
       if (key.name === "y") {
         if (state.focusedPane() === "tree") {
           const row = state.treeRows()[state.focusedRowIndex()];

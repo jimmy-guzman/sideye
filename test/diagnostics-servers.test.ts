@@ -17,7 +17,7 @@ test("resolveServerCommand returns undefined for a language with no registered s
   expect(resolveServerCommand("ruby", "/repo")).toBeUndefined();
 });
 
-test("handshake reports pull-diagnostics support from the initialize result", async () => {
+test("handshake parses advertised providers into the capability set", async () => {
   const requested: string[] = [];
   const notified: string[] = [];
   const connection: LspConnection = {
@@ -28,20 +28,34 @@ test("handshake reports pull-diagnostics support from the initialize result", as
     request: (method) =>
       Effect.sync(() => {
         requested.push(method);
+        // A typescript-language-server-shaped reply: definition/references/hover as options
+        // Objects, no diagnosticProvider (it pushes diagnostics instead).
         return method === "initialize"
-          ? { capabilities: { diagnosticProvider: { interFileDependencies: true } } }
+          ? {
+              capabilities: {
+                definitionProvider: true,
+                documentSymbolProvider: { label: "TypeScript" },
+                hoverProvider: true,
+                referencesProvider: true,
+              },
+            }
           : null;
       }),
   };
 
   const handle = await Effect.runPromise(performHandshake(connection, "/repo"));
 
-  expect(handle.supportsPullDiagnostics).toBe(true);
+  expect(handle.capabilities.has("definition")).toBe(true);
+  expect(handle.capabilities.has("references")).toBe(true);
+  expect(handle.capabilities.has("hover")).toBe(true);
+  expect(handle.capabilities.has("documentSymbol")).toBe(true);
+  expect(handle.capabilities.has("pullDiagnostics")).toBe(false);
   expect(requested).toEqual(["initialize"]);
   expect(notified).toEqual(["initialized"]);
 });
 
-test("handshake reports no pull support when the server has no diagnosticProvider", async () => {
+test("handshake yields an empty capability set when no providers are advertised", async () => {
+  // An oxlint-shaped reply: it lints via push and advertises none of the code-intel providers.
   const connection: LspConnection = {
     clearPublished: () => Effect.void,
     closed: Effect.sync(() => false),
@@ -52,5 +66,7 @@ test("handshake reports no pull support when the server has no diagnosticProvide
 
   const handle = await Effect.runPromise(performHandshake(connection, "/repo"));
 
-  expect(handle.supportsPullDiagnostics).toBe(false);
+  expect(handle.capabilities.has("definition")).toBe(false);
+  expect(handle.capabilities.has("pullDiagnostics")).toBe(false);
+  expect(handle.capabilities.size).toBe(0);
 });

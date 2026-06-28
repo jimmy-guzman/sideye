@@ -9,6 +9,7 @@ import { DiffEngineLive } from "./diff/engine";
 import { EditorLive } from "./editor/service";
 import { FileLive } from "./file/service";
 import { GitLive } from "./git/service";
+import { IntelLive } from "./intel/service";
 import { ProcessLive } from "./process";
 import { WatcherLive } from "./watcher/service";
 
@@ -20,6 +21,7 @@ import { WatcherLive } from "./watcher/service";
 // Diagnostics pool sits over its own long-lived LspProcess.
 const AppLayer = Layer.mergeAll(
   DiagnosticsLive,
+  IntelLive,
   DiffEngineLive,
   EditorLive,
   FileLive,

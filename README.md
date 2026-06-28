@@ -152,6 +152,13 @@ whole tree.
 
 ![project content search listing matches for a term across several files in the repo](assets/screenshots/search.png)
 
+### Go to definition
+
+Put the caret on a symbol and press `F12` to jump to its definition, backed by
+the same language servers that drive diagnostics. A cross-file jump records your
+spot, so `<` returns to the call site. It's a read-only LSP request, exactly
+like the diagnostics it shares servers with: it never writes to the repo.
+
 ### Problems
 
 Diagnostics from the repo's language servers stream into a problems panel as
@@ -190,6 +197,7 @@ repo's own, then your `PATH`), so diagnostics work out of the box. Pass
 | `f`        | load full content when truncated                  |
 | `ctrl-d/u` | half-page cursor movement in the viewer           |
 | `g` / `G`  | jump to first / last line                         |
+| `F12`      | go to definition of the symbol under the caret    |
 | `<` / `>`  | back / forward through viewer history             |
 | `y`        | copy `path`, `path:line`, or `path:line:col`      |
 
