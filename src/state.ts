@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { isAbsolute } from "node:path";
 
 import { Effect, Queue, Stream } from "effect";
 import { batch, createEffect, createMemo, createRoot, createSignal, on, onCleanup } from "solid-js";
@@ -42,6 +43,7 @@ import {
   expandAncestorsForPath,
   flattenTree,
 } from "./git/tree";
+import { Intel } from "./intel/service";
 import { runtime } from "./runtime";
 import { activeThemeName, selection, setSelection } from "./theme/active";
 import { themeNames } from "./theme/registry";
@@ -1067,6 +1069,73 @@ function createState() {
     noticeTimer = setTimeout(() => setNotice(undefined), 1500);
   }
 
+  let definitionController: AbortController | undefined;
+  // Jump the viewer to the definition of the symbol under the caret. Read-only LSP pull
+  // (`textDocument/definition`) over the warm server pool; degrades to a notice, never throws.
+  async function goToDefinition() {
+    const path = selectedPath();
+    const line = cursorLineNumber();
+    if (path === undefined || line === undefined) {
+      return;
+    }
+    // The caret must sit on a symbol in the current file's text: a gap or line-level caret has no
+    // Position to resolve, and a removed (old-only) line isn't in the file the server reads.
+    if (caretWord() === undefined) {
+      notify("move the caret onto a symbol");
+      return;
+    }
+    if (cursorLine()?.newLine === undefined) {
+      notify("nothing to resolve on a removed line");
+      return;
+    }
+    definitionController?.abort();
+    const controller = new AbortController();
+    definitionController = controller;
+    const requestRoot = repoRoot();
+    try {
+      const locations = await runtime.runPromise(
+        Intel.use((intel) =>
+          intel.definition(requestRoot, path, { character: cursorColumn(), line: line - 1 }),
+        ),
+        { signal: controller.signal },
+      );
+      // A worktree switch mid-request leaves these paths resolving against the old repo, so a jump
+      // Would land on a stale or missing file; drop the result unless the root still matches.
+      if (controller.signal.aborted || repoRoot() !== requestRoot) {
+        return;
+      }
+      if (locations.length === 0) {
+        notify("no definition found");
+        return;
+      }
+      // The service relativizes in-repo paths; an out-of-repo target (e.g. node_modules) stays
+      // Absolute and the tree can't open it, so jump to the first in-repo result instead.
+      const inRepo = locations.filter((location) => !isAbsolute(location.path));
+      const target = inRepo[0];
+      if (target === undefined) {
+        notify("definition is outside the repo");
+        return;
+      }
+      batch(() => {
+        selectFile(target.path);
+        setJumpTarget({
+          column: target.column,
+          escalate: true,
+          line: target.line,
+          path: target.path,
+        });
+        setFocusedPane("diff");
+      });
+      if (inRepo.length > 1) {
+        notify(`${inRepo.length} definitions`);
+      }
+    } catch {
+      if (!controller.signal.aborted) {
+        notify("couldn't reach the language server");
+      }
+    }
+  }
+
   function copy(text: string) {
     runtime
       .runPromise(Clipboard.use((clipboard) => clipboard.copy(text)))
@@ -1543,6 +1612,7 @@ function createState() {
     gitModel,
     goBack,
     goForward,
+    goToDefinition,
     helpDialogOpen,
     iconsEnabled,
     ideTemplate,

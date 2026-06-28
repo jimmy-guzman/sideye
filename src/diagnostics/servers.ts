@@ -149,27 +149,52 @@ function provisionSpecFor(language: string): ProvisionSpec | undefined {
   return { args: spec.args, binary: spec.binary, packages: spec.provision.packages };
 }
 
+/** The read-only LSP intents sideye uses, keyed off each server's advertised `*Provider`. */
+export type Capability =
+  | "definition"
+  | "references"
+  | "hover"
+  | "documentSymbol"
+  | "pullDiagnostics";
+
 export interface ServerHandle {
   readonly connection: LspConnection;
-  readonly supportsPullDiagnostics: boolean;
+  /** Which read-only intents this server advertised; drives data-driven server selection. */
+  readonly capabilities: ReadonlySet<Capability>;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function hasPullDiagnostics(initializeResult: unknown): boolean {
-  if (!isObject(initializeResult) || !isObject(initializeResult.capabilities)) {
-    return false;
+// LSP advertises a provider as `true` or an options object when supported, `undefined`/`false` when not.
+const capabilityProviders = [
+  ["definition", "definitionProvider"],
+  ["references", "referencesProvider"],
+  ["hover", "hoverProvider"],
+  ["documentSymbol", "documentSymbolProvider"],
+  ["pullDiagnostics", "diagnosticProvider"],
+] as const satisfies readonly (readonly [Capability, string])[];
+
+function parseCapabilities(initializeResult: unknown): Set<Capability> {
+  const capabilities = isObject(initializeResult) ? initializeResult.capabilities : undefined;
+  if (!isObject(capabilities)) {
+    return new Set();
   }
-  const provider = initializeResult.capabilities.diagnosticProvider;
-  return provider !== undefined && provider !== false;
+  return new Set(
+    capabilityProviders
+      .filter(([, provider]) => {
+        const advertised = capabilities[provider];
+        return advertised !== undefined && advertised !== false;
+      })
+      .map(([capability]) => capability),
+  );
 }
 
 /**
- * The LSP lifecycle handshake for a read-only client: `initialize` advertising only
- * pull-diagnostics capabilities (no edit/format/rename), then `initialized`. The server's reported
- * `diagnosticProvider` decides whether pulls are supported.
+ * The LSP lifecycle handshake for a read-only client: `initialize` advertising only read-only
+ * capabilities (diagnostics plus the code-intel pulls; no edit/format/rename), then `initialized`.
+ * The server's advertised `*Provider`s decide which intents `capabilities` carries.
  */
 export function performHandshake(
   connection: LspConnection,
@@ -181,9 +206,16 @@ export function performHandshake(
       .request("initialize", {
         capabilities: {
           // Push diagnostics require advertising publishDiagnostics + synchronization, or servers
-          // (e.g. typescript-language-server) stay silent. No edit/format/rename: read-only.
+          // (E.g. typescript-language-server) stay silent. The definition/references/hover/symbol
+          // Caps are the read-only code-intel pulls, all `textDocument/*` requests. No
+          // Edit/format/rename: read-only. linkSupport lets definition reply with `LocationLink`s,
+          // Which carry the symbol's name range.
           textDocument: {
+            definition: { dynamicRegistration: false, linkSupport: true },
+            documentSymbol: { dynamicRegistration: false },
+            hover: { dynamicRegistration: false },
             publishDiagnostics: { relatedInformation: true, versionSupport: false },
+            references: { dynamicRegistration: false },
             synchronization: { didSave: false, dynamicRegistration: false },
           },
           // A server that pulls its settings (oxlint) needs the workspace caps advertised here.
@@ -207,8 +239,8 @@ export function performHandshake(
       );
     yield* connection.notify("initialized", {});
     return {
+      capabilities: parseCapabilities(result),
       connection,
-      supportsPullDiagnostics: hasPullDiagnostics(result),
     } satisfies ServerHandle;
   });
 }
