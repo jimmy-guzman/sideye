@@ -167,40 +167,67 @@ repo's own, then your `PATH`), so diagnostics work out of the box. Pass
 
 ## Keys
 
-| Key         | Action                                            |
-| ----------- | ------------------------------------------------- |
-| `j` / `k`   | move in the tree, viewer, or problems panel       |
-| `h` / `l`   | collapse / expand folders, or word-hop the caret  |
-| `tab`       | switch focus between tree and viewer              |
-| `enter`     | open the focused item / jump to a problem         |
-| `ctrl-p`    | go to file: fuzzy-search the whole repo           |
-| `/`         | find in the viewer; `n`/`N` cycle, `esc` clears   |
-| `ctrl-f`    | search files; `ctrl-a` toggles changes/repo scope |
-| `s`         | scope picker: unstaged/staged/all/session/last    |
-| `t`         | theme switcher: filter, live-preview, apply       |
-| `w`         | switch to another git worktree                    |
-| `e`         | open file in terminal editor (suspends TUI)       |
-| `o`         | open file in GUI / IDE (renderer stays live)      |
-| `c`         | toggle changes-only filter for the tree           |
-| `v`         | toggle diff <-> full file view for a changed file |
-| `z`         | toggle long-line wrap in the viewer               |
-| `p`         | toggle the problems panel                         |
-| `b`         | toggle the file tree sidebar                      |
-| `[` / `]`   | shrink / grow the sidebar (shrink past min hides) |
-| `\`         | reset the sidebar to its default width            |
-| `.`         | jump to the most recently changed file            |
-| `n`         | jump to the next file with findings               |
-| `y`         | copy `path`, `path:line`, or `path:line:col`      |
-| `f`         | load full content when truncated                  |
-| `r`         | re-run checks                                     |
-| `ctrl-d/u`  | half-page cursor movement in the viewer           |
-| `g` / `G`   | jump to first / last line                         |
-| `<` / `>`   | back / forward through viewer history             |
-| `ctrl-t`    | pin / unpin the current file as a tab             |
-| `ctrl-w`    | close the active tab                              |
-| `{` / `}`   | previous / next tab                               |
-| `?`         | show all keybindings                              |
-| `q` / `esc` | quit (esc closes the problems panel first)        |
+### navigation
+
+| Key       | Action                                           |
+| --------- | ------------------------------------------------ |
+| `j` / `k` | move in the tree, viewer, or problems panel      |
+| `h` / `l` | collapse / expand folders, or word-hop the caret |
+| `tab`     | switch focus between tree and viewer             |
+| `enter`   | open the focused item / jump to a problem        |
+| `ctrl-p`  | go to file: fuzzy-search the whole repo          |
+| `.`       | jump to the most recently changed file           |
+| `n`       | jump to the next file with findings              |
+
+### viewer
+
+| Key        | Action                                            |
+| ---------- | ------------------------------------------------- |
+| `/`        | find in the viewer; `n`/`N` cycle, `esc` clears   |
+| `ctrl-f`   | search files; `ctrl-a` toggles changes/repo scope |
+| `v`        | toggle diff <-> full file view for a changed file |
+| `z`        | toggle long-line wrap in the viewer               |
+| `f`        | load full content when truncated                  |
+| `ctrl-d/u` | half-page cursor movement in the viewer           |
+| `g` / `G`  | jump to first / last line                         |
+| `<` / `>`  | back / forward through viewer history             |
+| `y`        | copy `path`, `path:line`, or `path:line:col`      |
+
+### tabs
+
+| Key       | Action                                |
+| --------- | ------------------------------------- |
+| `ctrl-t`  | pin / unpin the current file as a tab |
+| `ctrl-w`  | close the active tab                  |
+| `{` / `}` | previous / next tab                   |
+
+### workspace
+
+| Key | Action                                         |
+| --- | ---------------------------------------------- |
+| `s` | scope picker: unstaged/staged/all/session/last |
+| `t` | theme switcher: filter, live-preview, apply    |
+| `w` | switch to another git worktree                 |
+| `c` | toggle changes-only filter for the tree        |
+| `r` | re-run checks                                  |
+
+### layout
+
+| Key       | Action                                            |
+| --------- | ------------------------------------------------- |
+| `p`       | toggle the problems panel                         |
+| `b`       | toggle the file tree sidebar                      |
+| `[` / `]` | shrink / grow the sidebar (shrink past min hides) |
+| `\`       | reset the sidebar to its default width            |
+
+### app
+
+| Key         | Action                                       |
+| ----------- | -------------------------------------------- |
+| `e`         | open file in terminal editor (suspends TUI)  |
+| `o`         | open file in GUI / IDE (renderer stays live) |
+| `?`         | show all keybindings                         |
+| `q` / `esc` | quit (esc closes the problems panel first)   |
 
 Press `?` anytime to see the full list in the app:
 

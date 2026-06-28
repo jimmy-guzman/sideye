@@ -12,9 +12,10 @@ describe("help overlay", () => {
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
     const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
-      // Tall enough to fit the whole keybindings list, so the last-row assertions
-      // Below verify it sizes to show every shortcut (no clip) when there's room.
-      height: 44,
+      // Tall enough to fit the whole grouped keybindings list (its section headers
+      // And spacers included), so the last-row assertions below verify it sizes to
+      // Show every shortcut (no clip) when there's room.
+      height: 54,
       width: 120,
     });
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
