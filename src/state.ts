@@ -1081,11 +1081,16 @@ function createState() {
         const selectable = list.filter((worktree) => !worktree.bare);
         batch(() => {
           setWorktrees(selectable);
+          // Seed the highlight on the current worktree only when no query has been
+          // Typed while loading was in flight; a query filters the list, so the
+          // Full-list position could be out of range. The input resets to 0 on type.
           setWorktreeComboboxIndex(
-            Math.max(
-              0,
-              selectable.findIndex((worktree) => worktree.path === root),
-            ),
+            worktreeComboboxQuery() === ""
+              ? Math.max(
+                  0,
+                  selectable.findIndex((worktree) => worktree.path === root),
+                )
+              : 0,
           );
         });
       })

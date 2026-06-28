@@ -68,6 +68,7 @@ export function App() {
       state.fileComboboxOpen() ||
       state.searchComboboxOpen() ||
       state.themeComboboxOpen() ||
+      state.worktreeComboboxOpen() ||
       state.findOpen();
     if (!inputFocused) {
       renderer.setCursorPosition(0, 0, false);
