@@ -1091,14 +1091,17 @@ function createState() {
     definitionController?.abort();
     const controller = new AbortController();
     definitionController = controller;
+    const requestRoot = repoRoot();
     try {
       const locations = await runtime.runPromise(
         Intel.use((intel) =>
-          intel.definition(repoRoot(), path, { character: cursorColumn(), line: line - 1 }),
+          intel.definition(requestRoot, path, { character: cursorColumn(), line: line - 1 }),
         ),
         { signal: controller.signal },
       );
-      if (controller.signal.aborted) {
+      // A worktree switch mid-request leaves these paths resolving against the old repo, so a jump
+      // Would land on a stale or missing file; drop the result unless the root still matches.
+      if (controller.signal.aborted || repoRoot() !== requestRoot) {
         return;
       }
       if (locations.length === 0) {

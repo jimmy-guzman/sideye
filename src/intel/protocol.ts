@@ -54,7 +54,12 @@ function isLocationLink(value: unknown): value is LspLocationLink {
   return isObject(value) && typeof value.targetUri === "string" && isRange(value.targetRange);
 }
 
-function locationFrom(uri: string, start: LspPosition): NormalizedLocation {
+function locationFrom(uri: string, start: LspPosition): NormalizedLocation | undefined {
+  // A server may point at a non-file resource (e.g. `untitled:`, `jdt://`); `fileURLToPath` throws
+  // On those, so skip them and let the other results through rather than aborting the whole reply.
+  if (!uri.startsWith("file:")) {
+    return undefined;
+  }
   return { column: start.character + 1, line: start.line + 1, path: fileURLToPath(uri) };
 }
 

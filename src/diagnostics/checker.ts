@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 
 import type { ChangedFile } from "../git/model";
+import { relativize } from "../utils/path";
 
 // Diagnostics collapse to a single source now that they come from language servers; each diagnostic
 // Carries its own LSP `source` label (e.g. "ts", "eslint"). The keyed-map shape is retained so the
@@ -201,13 +202,4 @@ export function resolveBinary(dir: string, binary: string) {
     return local;
   }
   return Bun.which(binary) ?? undefined;
-}
-
-/**
- * An LSP `uri` decodes to an absolute path; sideye's tree/viewer key off repo-relative paths. A
- * path outside the repo (a definition in `node_modules`) stays absolute, so callers can detect it.
- */
-export function relativize(path: string, repoRoot: string) {
-  const prefix = repoRoot.endsWith("/") ? repoRoot : `${repoRoot}/`;
-  return (path.startsWith(prefix) ? path.slice(prefix.length) : path).replace(/^\.\//, "");
 }

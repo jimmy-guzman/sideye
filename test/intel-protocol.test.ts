@@ -46,6 +46,12 @@ test("normalizeDefinition drops malformed items", () => {
   ]);
 });
 
+test("normalizeDefinition skips non-file URIs instead of throwing", () => {
+  const untitled = { range, uri: "untitled:Untitled-1" };
+  expect(normalizeDefinition([untitled, { range, uri }])).toEqual([{ column: 3, line: 5, path }]);
+  expect(normalizeDefinition(untitled)).toEqual([]);
+});
+
 test("normalizeReferences maps a Location array and ignores a non-array reply", () => {
   expect(normalizeReferences([{ range, uri }])).toEqual([{ column: 3, line: 5, path }]);
   expect(normalizeReferences(null)).toEqual([]);
