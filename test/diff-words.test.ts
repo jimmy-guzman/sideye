@@ -75,3 +75,11 @@ test("prevWord hops to the preceding word start, then stays at the first", () =>
   expect(prevWord(line, 8)).toBe(6); // From mid-word jumps to that word's start
   expect(prevWord(line, 0)).toBe(0); // Already on the first word
 });
+
+test("from a gap with no word ahead/behind, the helpers stay put (so the caret wraps lines)", () => {
+  // "x = y": words x(0), y(4). A trailing gap (index 5, past y) has no word ahead;
+  // A leading gap (index 0 of "  x", before x at 2) has no word behind. Both must
+  // Return the index unchanged so caretNextWord/caretPrevWord take the line-wrap branch.
+  expect(nextWord("x = y", 5)).toBe(5);
+  expect(prevWord("  x", 0)).toBe(0);
+});

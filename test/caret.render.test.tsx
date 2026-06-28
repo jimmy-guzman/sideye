@@ -107,4 +107,45 @@ describe("word caret", () => {
       rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
+
+  test("back restores the caret column captured on leave", async () => {
+    const repoRoot = createFixtureRepo("sideye-caret-nav-", {
+      "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
+      "src/a.ts": "const a = 1\n",
+      "src/b.ts": "const b = 1\n",
+    });
+    writeFileSync(join(repoRoot, "src", "a.ts"), "const a = 2\n");
+    writeFileSync(join(repoRoot, "src", "b.ts"), "const b = 2\n");
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame, mockInput } = await testRender(() => <App />, {
+      height: 30,
+      width: 110,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      state.selectFile("src/a.ts");
+      await settleUntil("file a caret home", (current) => /ln \d+:1\b/.test(current));
+
+      // Move the caret off the first word so the column is non-default, then leave.
+      mockInput.pressTab();
+      mockInput.pressKey("l");
+      await settleUntil("caret moved on a", (current) => /ln \d+:7\b/.test(current));
+
+      state.selectFile("src/b.ts");
+      await settleUntil("file b", (current) => /ln \d+:1\b/.test(current));
+
+      // Back to a must restore the captured caret column, not re-home to the first word.
+      mockInput.pressKey("<");
+      const restored = await settleUntil("a caret restored", (current) =>
+        /ln \d+:7\b/.test(current),
+      );
+      expect(restored).toMatch(/ln \d+:7\b/);
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
 });

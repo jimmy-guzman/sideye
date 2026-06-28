@@ -50,17 +50,17 @@ export function wordAt(line: string, index: number): Word | undefined {
   return words(line).find((word) => index >= word.start && index < word.end);
 }
 
-/** The next word start strictly after `index`; stays put when there is none. */
+/** The next word start strictly after `index`; stays put (returns `index`) when there is none. */
 export function nextWord(line: string, index: number): number {
-  const starts = wordStarts(line);
-  return starts.find((start) => start > index) ?? lastAtOrBefore(starts, index) ?? index;
+  return wordStarts(line).find((start) => start > index) ?? index;
 }
 
-/** The previous word start strictly before `index`; stays put when there is none. */
+/** The previous word start strictly before `index`; stays put (returns `index`) when there is none. */
 export function prevWord(line: string, index: number): number {
-  const starts = wordStarts(line);
   return (
-    starts.toReversed().find((start) => start < index) ?? firstAtOrAfter(starts, index) ?? index
+    wordStarts(line)
+      .toReversed()
+      .find((start) => start < index) ?? index
   );
 }
 
@@ -73,12 +73,4 @@ export function firstWord(line: string): number {
 export function lastWord(line: string): number {
   const starts = wordStarts(line);
   return starts[starts.length - 1] ?? 0;
-}
-
-function lastAtOrBefore(starts: number[], index: number) {
-  return starts.toReversed().find((start) => start <= index);
-}
-
-function firstAtOrAfter(starts: number[], index: number) {
-  return starts.find((start) => start >= index);
 }

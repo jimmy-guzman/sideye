@@ -37,8 +37,8 @@ problems. You decide what to say next.
 - Marks recent activity and lets you jump to the latest touched file.
 - Shows diagnostics in the tree, in the viewer, and in a problems panel.
 - Copies a reference and snippet to paste back into the agent conversation: the
-  file `path` in the tree, `path:line` in the viewer, and `path:line:col` when the
-  caret is on a symbol.
+  file `path` in the tree and `path:line:col` in the viewer (`path:line` after
+  clicking a line number).
 
 The git-backed file tree renders first. Diagnostics come in later as decorations.
 That keeps the basic view useful even when checks are still running.

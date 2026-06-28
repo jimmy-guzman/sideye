@@ -52,7 +52,7 @@ const KEY_HELP: [combo: string, action: string][] = [
   ["[ / ] / \\", "shrink (collapses past min) / grow / reset sidebar"],
   [".", "jump to the most recently changed file"],
   ["n", "jump to the next file with findings"],
-  ["y", "copy path (tree), path:line, or path:line:col when on a symbol (viewer)"],
+  ["y", "copy path (tree) or path:line:col (viewer; path:line on a line-number click)"],
   ["f", "load full content when truncated"],
   ["r", "re-run checks"],
   ["ctrl-d/u", "half-page cursor movement in the viewer"],
