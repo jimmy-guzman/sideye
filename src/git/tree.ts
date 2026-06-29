@@ -119,8 +119,17 @@ export function decorateTree(
   nodes: FileTreeNode[],
   changedByPath: Map<string, ChangedFile>,
 ): FileTreeNode[] {
-  const result = nodes.map((node) => decorateNode(node, changedByPath));
-  return result.every((node, i) => node === nodes[i]) ? nodes : result;
+  let result: FileTreeNode[] | undefined;
+  for (let i = 0; i < nodes.length; i++) {
+    const next = decorateNode(nodes[i], changedByPath);
+    if (next !== nodes[i]) {
+      result ??= nodes.slice(0, i);
+      result.push(next);
+    } else if (result !== undefined) {
+      result.push(next);
+    }
+  }
+  return result ?? nodes;
 }
 
 function decorateNode(node: FileTreeNode, changedByPath: Map<string, ChangedFile>): FileTreeNode {
@@ -131,8 +140,17 @@ function decorateNode(node: FileTreeNode, changedByPath: Map<string, ChangedFile
     }
     return { ...node, changed };
   }
-  const children = node.children.map((child) => decorateNode(child, changedByPath));
-  if (children.every((child, i) => child === node.children[i])) {
+  let children: FileTreeNode[] | undefined;
+  for (let i = 0; i < node.children.length; i++) {
+    const next = decorateNode(node.children[i], changedByPath);
+    if (next !== node.children[i]) {
+      children ??= node.children.slice(0, i);
+      children.push(next);
+    } else if (children !== undefined) {
+      children.push(next);
+    }
+  }
+  if (children === undefined) {
     return node;
   }
   return { ...node, ...aggregateChildren(children), children };

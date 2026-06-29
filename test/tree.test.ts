@@ -181,10 +181,12 @@ describe("structure and decoration split", () => {
     // An unchanged file inside a directory also keeps its reference.
     const expanded = new Set(["dir:src", "dir:src/components/ui"]);
     const rows = flattenTree(first, expanded);
-    const buttonBefore = rows.find((r) => r.node.path === "src/components/ui/Button.tsx")?.node;
+    const buttonBefore = rows.find((r) => r.node.path === "src/components/ui/Button.tsx");
+    expect(buttonBefore).toBeDefined();
     const rows2 = flattenTree(second, expanded);
-    const buttonAfter = rows2.find((r) => r.node.path === "src/components/ui/Button.tsx")?.node;
-    expect(buttonAfter).toBe(buttonBefore);
+    const buttonAfter = rows2.find((r) => r.node.path === "src/components/ui/Button.tsx");
+    expect(buttonAfter).toBeDefined();
+    expect(buttonAfter!.node).toBe(buttonBefore!.node);
   });
 
   test("buildFileTree equals structure-then-decorate", () => {
