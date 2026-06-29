@@ -46,6 +46,14 @@ describe("renderDiff", () => {
     });
   });
 
+  test("serves an identical patch from the byte-capped cache by reference", async () => {
+    // A second render of the same fingerprint returns the cached render object itself, not a
+    // Recompute, confirming the size-tracking cache wrapper still resolves hits to `.render`.
+    const first = await renderDiff({ full: false, maxLines: 1600, patch });
+    const second = await renderDiff({ full: false, maxLines: 1600, patch });
+    expect(second).toBe(first);
+  });
+
   test("highlights a language not in the warm preload set by attaching its grammar on demand", async () => {
     // Rust is not preloaded; its grammar must be resolved and attached before the diff highlights.
     const rustPatch = `diff --git a/main.rs b/main.rs

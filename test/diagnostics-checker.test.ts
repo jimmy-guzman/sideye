@@ -45,6 +45,14 @@ describe("initialCheckerState", () => {
     const state = initialCheckerState([file]);
     expect(state.diagnostics.get("src/a.ts")?.status).toBe("pending");
   });
+
+  test("holds only the given changed files, so a worktree switch drops the prior set", () => {
+    // Worktree A had findings in src/a.ts; switching to B reseeds from B's changed set,
+    // So A's path is gone rather than carried forward forever.
+    const state = initialCheckerState([{ ...file, path: "src/b.ts" }]);
+    expect([...state.diagnostics.keys()]).toEqual(["src/b.ts"]);
+    expect(state.diagnostics.has("src/a.ts")).toBe(false);
+  });
 });
 
 describe("markPending", () => {
