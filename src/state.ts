@@ -49,6 +49,7 @@ import { activeThemeName, selection, setSelection } from "./theme/active";
 import { themeNames } from "./theme/registry";
 import type { ThemeSelection } from "./theme/registry";
 import { worktreeLabel } from "./ui-helpers";
+import { fetchLatestVersion, isNewer } from "./upgrade/release";
 import { findMatches as findMatchIndices } from "./utils/find";
 import { rankFiles } from "./utils/fuzzy";
 import { refreshDelay } from "./utils/refresh-cadence";
@@ -309,6 +310,10 @@ function createState() {
   // An ephemeral acknowledgment of a user action (copied, scope changed, …),
   // Held for a fixed dwell so it outlives the keystroke that triggered it.
   const [notice, setNotice] = createSignal<string | undefined>(undefined);
+  // Set by the background release check; read once on quit to print the post-exit notice.
+  const [availableUpdate, setAvailableUpdate] = createSignal<
+    { current: string; latest: string } | undefined
+  >(undefined);
   const [activityLog, setActivityLog] = createSignal<ActivityLog>(emptyActivityLog);
   const [checksRunning, setChecksRunning] = createSignal(false);
   const [now, setNow] = createSignal(Date.now());
@@ -1080,6 +1085,15 @@ function createState() {
     noticeTimer = setTimeout(() => setNotice(undefined), 1500);
   }
 
+  // Background, non-blocking: a newer release surfaces in the post-exit quit notice. Bounded by a
+  // Timeout and error-swallowing in fetchLatestVersion, so it never blocks or breaks startup.
+  async function checkForUpdate(current: string) {
+    const latest = await fetchLatestVersion();
+    if (latest !== undefined && isNewer(latest, current)) {
+      setAvailableUpdate({ current, latest });
+    }
+  }
+
   let definitionController: AbortController | undefined;
   // Jump the viewer to the definition of the symbol under the caret. Read-only LSP pull
   // (`textDocument/definition`) over the warm server pool; degrades to a notice, never throws.
@@ -1616,6 +1630,7 @@ function createState() {
     activateTab,
     activityLog,
     allProblemItems,
+    availableUpdate,
     canGoBack,
     canGoForward,
     caretColumn,
@@ -1624,6 +1639,7 @@ function createState() {
     caretPrevWord,
     caretWord,
     changesOnly,
+    checkForUpdate,
     checkerState,
     checksRunning,
     closeActiveTab,

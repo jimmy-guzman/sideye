@@ -215,6 +215,8 @@ Commands:
       through: a standalone install re-runs the install script, an npm install
       runs npm, and a Homebrew install runs brew upgrade. If the install
       channel cannot be determined, it prints the upgrade commands instead.
+      Checks the latest GitHub release first and does nothing when already up
+      to date.
 
 Options:
   --editor <template>
