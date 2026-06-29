@@ -70,9 +70,9 @@ GitHub release first and reports `sideye X.Y.Z is already up to date` without
 running anything when you are current, falling back to the channel update if it
 cannot reach GitHub.
 
-sideye also checks for a newer release in the background while it runs, and on
-exit prints a one-line notice when one is available, the way `gh` does. The
-check is non-blocking and never interrupts the session.
+sideye also checks for a newer release in the background while it runs, and
+prints a one-line notice on clean exit when one is available, the way `gh` does.
+The check is non-blocking and never interrupts the session.
 
 ## Usage
 
