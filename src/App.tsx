@@ -26,6 +26,7 @@ import { state } from "./state";
 import { setAppearance } from "./theme/active";
 import { useTheme } from "./theme/context";
 import { worktreeLabel } from "./ui-helpers";
+import { formatUpdateNotice } from "./upgrade/release";
 
 export function App() {
   const theme = useTheme();
@@ -86,6 +87,14 @@ export function App() {
       console.log(message);
     }
     process.exit(0);
+  }
+
+  // The user-initiated quit (keyboard) surfaces a pending update on the way out, gh-style. The
+  // Worktree-recovery exit calls quit() directly, so a forced "nothing left to inspect" shutdown
+  // Stays silent, as do the crash/signal backstops in main.tsx (which never route here).
+  function quitWithUpdateNotice() {
+    const update = state.availableUpdate();
+    quit(update === undefined ? undefined : formatUpdateNotice(update));
   }
 
   // The heartbeat flags a deleted current worktree; recover by switching to the
@@ -160,7 +169,7 @@ export function App() {
     }
   }
 
-  useKeyboard(createKeyHandler({ openInEditor, quit }));
+  useKeyboard(createKeyHandler({ openInEditor, quit: quitWithUpdateNotice }));
 
   return (
     <box

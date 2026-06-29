@@ -25,7 +25,9 @@ try {
   const command = parseCommand(Bun.argv.slice(2));
 
   if (command.kind === "upgrade") {
-    process.exit(await runUpgrade({ execPath: process.execPath }));
+    process.exit(
+      await runUpgrade({ currentVersion: packageJson.version, execPath: process.execPath }),
+    );
   }
 
   const options = command.options;
@@ -156,6 +158,10 @@ try {
   // Worktree switch already uses. A load failure (not a repo) restores the
   // Terminal before exiting, since the alt-screen is now already entered.
   void render(() => <App />, renderer);
+
+  // Check for a newer release in the background, independent of the git load, so it neither gates
+  // Nor is gated by it. A hit surfaces on the way out via the quit notice.
+  void state.checkForUpdate(packageJson.version);
 
   runtime
     .runPromise(startup)
