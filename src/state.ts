@@ -1358,6 +1358,9 @@ function createState() {
         // To one fresh tab on the new worktree's selected file.
         seedNav(selected);
         setProblemIndex(0);
+        // Worktree A's diagnostics are meaningless in B; without this, markPending and
+        // The cross-file carry-forward would accumulate every visited worktree's findings.
+        setCheckerState(initialCheckerState(fresh.changed));
         setActivityLog(emptyActivityLog);
         setFocusedPane("tree");
         setStatus(reason ?? `worktree: ${worktreeLabel(worktree)}`);

@@ -96,10 +96,34 @@ const RENDER_OPTIONS: Omit<RenderDiffOptions, "theme"> = {
 };
 
 const MAX_CACHE = 40;
+// A count cap alone lets 40 large full-file renders hold hundreds of MB, since each
+// Render retains every line's text. Cap on approximate bytes too, with the count as a
+// Backstop for many tiny renders.
+const MAX_CACHE_BYTES = 64 * 1024 * 1024;
 const EMPTY: DiffRender = { navigable: [], rows: [], truncated: false };
 
-const cache = new Map<string, DiffRender>();
+const cache = new Map<string, { render: DiffRender; bytes: number }>();
+let cacheBytes = 0;
 const inflight = new Map<string, Promise<DiffRender>>();
+
+// Approximate retained size: the per-line text dominates (UTF-16, 2 bytes/code unit);
+// `fg` labels and object overhead are ignored and offset by a conservative cap.
+function sizeOf(render: DiffRender) {
+  let units = 0;
+  for (const row of render.rows) {
+    if (row.kind === "line") {
+      for (const span of row.spans) {
+        units += span.text.length;
+      }
+    } else {
+      units += row.text.length;
+    }
+  }
+  for (const line of render.navigable) {
+    units += line.content.length;
+  }
+  return units * 2;
+}
 
 let highlighterPromise: Promise<DiffsHighlighter> | undefined;
 function highlighter(themeName: string) {
@@ -168,8 +192,10 @@ export function structureDiff(input: RenderInput): DiffRender {
 // Without preloading every grammar. Each language's attachment is memoized by
 // `attaching` so concurrent renders of the same new language await one shared
 // Promise instead of racing it (a render that skipped the wait would cache
-// Plain-text spans before the grammar finished attaching); a settled promise is
-// Reused, so a bogus extension is not re-resolved on every render.
+// Plain-text spans before the grammar finished attaching). A successful attach
+// Drops its entry (`areLanguagesAttached` dedupes thereafter), so the map only
+// Retains failed extensions, which keeps a bogus extension from re-resolving on
+// Every render without growing one entry per language for the process lifetime.
 const attaching = new Map<string, Promise<unknown>>();
 
 function attach(lang: string) {
@@ -181,9 +207,14 @@ function attach(lang: string) {
     langs: [lang],
     preferredHighlighter: "shiki-wasm",
     themes: [diffThemeName()],
-  }).catch(() => {
-    // Not a real Shiki grammar, or a load failure: the render falls back to plain text.
-  });
+  })
+    .then(() => {
+      attaching.delete(lang);
+    })
+    .catch(() => {
+      // Not a real Shiki grammar, or a load failure: the render falls back to plain text.
+      // Keep the settled entry so the failed extension is not re-resolved every render.
+    });
   attaching.set(lang, promise);
   return promise;
 }
@@ -232,12 +263,18 @@ async function compute(input: RenderInput): Promise<DiffRender> {
 }
 
 function evict() {
-  while (cache.size > MAX_CACHE) {
-    const oldest = cache.keys().next().value;
-    if (oldest === undefined) {
+  // Keep the just-inserted (possibly oversized) render even when it alone exceeds the
+  // Byte cap: it is the one being viewed.
+  while (cache.size > MAX_CACHE || (cacheBytes > MAX_CACHE_BYTES && cache.size > 1)) {
+    const key = cache.keys().next().value;
+    if (key === undefined) {
       return;
     }
-    cache.delete(oldest);
+    const entry = cache.get(key);
+    cache.delete(key);
+    if (entry !== undefined) {
+      cacheBytes -= entry.bytes;
+    }
   }
 }
 
@@ -254,7 +291,7 @@ export function renderDiff(input: RenderInput): Promise<DiffRender> {
   const key = fingerprint(input);
   const hit = cache.get(key);
   if (hit !== undefined) {
-    return Promise.resolve(hit);
+    return Promise.resolve(hit.render);
   }
 
   const existing = inflight.get(key);
@@ -265,7 +302,9 @@ export function renderDiff(input: RenderInput): Promise<DiffRender> {
   const promise = compute(input)
     .then((result) => {
       inflight.delete(key);
-      cache.set(key, result);
+      const bytes = sizeOf(result);
+      cache.set(key, { bytes, render: result });
+      cacheBytes += bytes;
       evict();
       return result;
     })
