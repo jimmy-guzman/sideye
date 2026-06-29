@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { Effect, Layer } from "effect";
+import { Deferred, Effect, Layer } from "effect";
 
 import { LanguageServers, ServerUnavailable } from "../src/diagnostics/servers";
 import type { Capability, ServerHandle } from "../src/diagnostics/servers";
@@ -23,6 +23,7 @@ function handle(
   capabilities: Capability[],
   respond: (method: string, params: unknown) => Effect.Effect<unknown, LspRequestError>,
   log: Recorded[],
+  whenProjectLoaded: Effect.Effect<void> = Effect.void,
 ): ServerHandle {
   const connection: LspConnection = {
     clearPublished: () => Effect.void,
@@ -39,6 +40,7 @@ function handle(
       log.push({ method, params });
       return respond(method, params);
     },
+    whenProjectLoaded,
   };
   return { capabilities: new Set(capabilities), connection };
 }
@@ -112,6 +114,53 @@ test("definition opens the file, requests at the caret, normalizes, then closes"
         position: { character: 6, line: 0 },
         textDocument: { uri: pathToFileURL(join(dir, "src/a.ts")).href },
       });
+    },
+  );
+});
+
+test("definition waits for project load before requesting", async () => {
+  await withRepo(
+    { "src/a.ts": "const x = y\n", "src/b.ts": "export const y = 1\n" },
+    async (dir) => {
+      const log: Recorded[] = [];
+      const targetUri = pathToFileURL(join(dir, "src/b.ts")).href;
+      // A server still loading its project: `whenProjectLoaded` stays pending until the test
+      // Releases the gate, standing in for the window where tsserver answers from the local
+      // Import binding instead of the real source.
+      const gate = await Effect.runPromise(Deferred.make<void>());
+      const ts = handle(
+        ["definition"],
+        () => Effect.succeed({ range: definitionRange, uri: targetUri }),
+        log,
+        Deferred.await(gate),
+      );
+
+      const result = runDefinition(
+        dir,
+        "src/a.ts",
+        { character: 6, line: 0 },
+        fakeServers({ typescript: ts }),
+      );
+      // Wait until the pull has actually opened the doc (rather than guessing with a fixed delay),
+      // Then assert it's now blocked on readiness: the next step after didOpen is the held gate, so
+      // No definition request can have gone out yet.
+      await Effect.runPromise(
+        Effect.gen(function* awaitOpen() {
+          while (!log.some((entry) => entry.method === "textDocument/didOpen")) {
+            yield* Effect.sleep("1 milli");
+          }
+        }).pipe(Effect.timeout("5 seconds")),
+      );
+      expect(log.map((entry) => entry.method)).toEqual(["textDocument/didOpen"]);
+
+      await Effect.runPromise(Deferred.succeed(gate, undefined));
+
+      expect(await result).toEqual([{ column: 3, line: 5, path: "src/b.ts" }]);
+      expect(log.map((entry) => entry.method)).toEqual([
+        "textDocument/didOpen",
+        "textDocument/definition",
+        "textDocument/didClose",
+      ]);
     },
   );
 });

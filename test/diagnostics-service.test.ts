@@ -43,6 +43,7 @@ function pushingHandle(items: unknown[]): ServerHandle {
     openDocument: (textDocument) => Effect.sync(() => void published.set(textDocument.uri, items)),
     published: Effect.sync(() => published),
     request: () => Effect.succeed(null),
+    whenProjectLoaded: Effect.void,
   };
   return { capabilities: new Set(), connection };
 }
@@ -58,6 +59,7 @@ function deadHandle(): ServerHandle {
     openDocument: () => Effect.void,
     published: Effect.sync(() => new Map<string, unknown[]>()),
     request: () => Effect.succeed(null),
+    whenProjectLoaded: Effect.void,
   };
   return { capabilities: new Set(), connection };
 }
@@ -138,6 +140,7 @@ test("closes every opened document even when the run is interrupted mid-settle",
       openDocument: (textDocument) => Effect.sync(() => void opens.push(textDocument.uri)),
       published: Effect.sync(() => new Map<string, unknown[]>()),
       request: () => Effect.succeed(null),
+      whenProjectLoaded: Effect.void,
     };
     const handle: ServerHandle = { capabilities: new Set(), connection };
 

@@ -33,6 +33,7 @@ test("resolveServerCommand returns undefined for a language with no registered s
 test("handshake parses advertised providers into the capability set", async () => {
   const requested: string[] = [];
   const notified: string[] = [];
+  let initializeParams: unknown;
   const connection: LspConnection = {
     clearPublished: () => Effect.void,
     closeDocument: () => Effect.void,
@@ -40,9 +41,10 @@ test("handshake parses advertised providers into the capability set", async () =
     notify: (method) => Effect.sync(() => void notified.push(method)),
     openDocument: () => Effect.void,
     published: Effect.sync(() => new Map<string, unknown[]>()),
-    request: (method) =>
+    request: (method, params) =>
       Effect.sync(() => {
         requested.push(method);
+        initializeParams = method === "initialize" ? params : initializeParams;
         // A typescript-language-server-shaped reply: definition/references/hover as options
         // Objects, no diagnosticProvider (it pushes diagnostics instead).
         return method === "initialize"
@@ -56,6 +58,7 @@ test("handshake parses advertised providers into the capability set", async () =
             }
           : null;
       }),
+    whenProjectLoaded: Effect.void,
   };
 
   const handle = await Effect.runPromise(performHandshake(connection, "/repo"));
@@ -67,6 +70,9 @@ test("handshake parses advertised providers into the capability set", async () =
   expect(handle.capabilities.has("pullDiagnostics")).toBe(false);
   expect(requested).toEqual(["initialize"]);
   expect(notified).toEqual(["initialized"]);
+  // Opting into workDoneProgress is what makes tsserver report project-load begin/end; without it
+  // The intel readiness gate never opens.
+  expect(initializeParams).toMatchObject({ capabilities: { window: { workDoneProgress: true } } });
 });
 
 test("handshake yields an empty capability set when no providers are advertised", async () => {
@@ -79,6 +85,7 @@ test("handshake yields an empty capability set when no providers are advertised"
     openDocument: () => Effect.void,
     published: Effect.sync(() => new Map<string, unknown[]>()),
     request: () => Effect.succeed({ capabilities: {} }),
+    whenProjectLoaded: Effect.void,
   };
 
   const handle = await Effect.runPromise(performHandshake(connection, "/repo"));
@@ -99,6 +106,7 @@ test("handshake treats a malformed provider value as unsupported", async () => {
     published: Effect.sync(() => new Map<string, unknown[]>()),
     request: () =>
       Effect.succeed({ capabilities: { definitionProvider: null, referencesProvider: 0 } }),
+    whenProjectLoaded: Effect.void,
   };
 
   const handle = await Effect.runPromise(performHandshake(connection, "/repo"));
