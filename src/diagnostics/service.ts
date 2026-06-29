@@ -96,8 +96,11 @@ function collectDiagnostics(handle: ServerHandle, repoRoot: string, files: Chang
       }
       const uri = pathToFileURL(absolute).href;
       yield* handle.connection.clearPublished([uri]);
-      yield* handle.connection.notify("textDocument/didOpen", {
-        textDocument: { languageId: lspLanguageId(file.path), text, uri, version: 1 },
+      yield* handle.connection.openDocument({
+        languageId: lspLanguageId(file.path),
+        text,
+        uri,
+        version: 1,
       });
       opened.push({ file, uri });
     }
@@ -123,12 +126,9 @@ function collectDiagnostics(handle: ServerHandle, repoRoot: string, files: Chang
       }
     }
 
-    yield* Effect.forEach(
-      opened,
-      (entry) =>
-        handle.connection.notify("textDocument/didClose", { textDocument: { uri: entry.uri } }),
-      { discard: true },
-    );
+    yield* Effect.forEach(opened, (entry) => handle.connection.closeDocument(entry.uri), {
+      discard: true,
+    });
     return { diagnostics, pending, resolved };
   });
 }

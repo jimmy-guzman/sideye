@@ -25,10 +25,6 @@ function changed(path: string): ChangedFile {
   };
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 // A push server: it publishes the given items for a document as soon as the client opens it, exactly
 // As typescript-language-server does. A real LspConnection, not a mock of sideye's own code.
 function pushingHandle(items: unknown[]): ServerHandle {
@@ -40,18 +36,10 @@ function pushingHandle(items: unknown[]): ServerHandle {
           published.delete(uri);
         }
       }),
+    closeDocument: () => Effect.void,
     closed: Effect.sync(() => false),
-    notify: (method, params) =>
-      Effect.sync(() => {
-        if (
-          method === "textDocument/didOpen" &&
-          isObject(params) &&
-          isObject(params.textDocument) &&
-          typeof params.textDocument.uri === "string"
-        ) {
-          published.set(params.textDocument.uri, items);
-        }
-      }),
+    notify: () => Effect.void,
+    openDocument: (textDocument) => Effect.sync(() => void published.set(textDocument.uri, items)),
     published: Effect.sync(() => published),
     request: () => Effect.succeed(null),
   };
@@ -63,8 +51,10 @@ function pushingHandle(items: unknown[]): ServerHandle {
 function deadHandle(): ServerHandle {
   const connection: LspConnection = {
     clearPublished: () => Effect.void,
+    closeDocument: () => Effect.void,
     closed: Effect.sync(() => true),
     notify: () => Effect.void,
+    openDocument: () => Effect.void,
     published: Effect.sync(() => new Map<string, unknown[]>()),
     request: () => Effect.succeed(null),
   };
