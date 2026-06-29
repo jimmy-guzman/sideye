@@ -118,6 +118,14 @@ export const IntelLive = Layer.effect(
             }),
             () => handle.connection.closeDocument(uri),
           );
+          // Opening the doc triggers the project load; querying before it finishes makes tsserver
+          // Resolve an import to its local binding (the F12-stops-at-import bug), so wait for the
+          // Load. The wait is interruptible (the caller aborts on the next keystroke/navigation) and
+          // Resolves on connection close; the 60s backstop covers a server that never signals load.
+          yield* handle.connection.whenProjectLoaded.pipe(
+            Effect.timeout("60 seconds"),
+            Effect.ignore,
+          );
           const reply = yield* handle.connection
             .request(method, { position, textDocument: { uri }, ...extraParams })
             .pipe(

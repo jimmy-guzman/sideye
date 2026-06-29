@@ -45,6 +45,14 @@ export interface LspConnection {
   readonly clearPublished: (uris: readonly string[]) => Effect.Effect<void>;
   /** True once the server's stdout closed — the child died; the pool should rebuild it. */
   readonly closed: Effect.Effect<boolean>;
+  /**
+   * Resolves once the server has finished loading its project (the first `$/progress` "end" after
+   * `initialize`), or immediately when already loaded. Until then a server like
+   * typescript-language-server answers `textDocument/definition` from the local import binding
+   * instead of resolving cross-file, so intel pulls await this before requesting. Also resolves on
+   * connection close so a pull never hangs past server death.
+   */
+  readonly whenProjectLoaded: Effect.Effect<void>;
 }
 
 interface Pending {
@@ -69,6 +77,17 @@ export function makeTransport(
     const openCounts = new Map<string, number>();
     let nextId = 0;
     let closed = false;
+    // Resolved on the first project-load `$/progress` "end" (or on close); `whenProjectLoaded`
+    // Gates intel pulls so a request never lands during the load window with a premature reply.
+    let loaded = false;
+    const projectLoaded = yield* Deferred.make<void>();
+    const markLoaded = Effect.suspend(() => {
+      if (loaded) {
+        return Effect.void;
+      }
+      loaded = true;
+      return Deferred.succeed(projectLoaded, undefined).pipe(Effect.asVoid);
+    });
 
     function dispatch(message: unknown) {
       if (isJsonRpcResponse(message)) {
@@ -103,6 +122,12 @@ export function makeTransport(
           }
           return Effect.void;
         }
+        // A workDoneProgress "end" marks the project load complete; before it, intel replies are
+        // Resolved from the local import binding rather than cross-file (the F12-stops-at-import bug).
+        if (message.method === "$/progress" && isObject(message.params)) {
+          const { value } = message.params;
+          return isObject(value) && value.kind === "end" ? markLoaded : Effect.void;
+        }
         return Effect.logDebug(`lsp notification ${message.method}`);
       }
       return Effect.void;
@@ -117,6 +142,8 @@ export function makeTransport(
         Effect.sync(() => {
           closed = true;
         }).pipe(
+          // Release any pull awaiting project load so it fails fast instead of hanging past death.
+          Effect.andThen(markLoaded),
           Effect.andThen(
             Effect.forEach(
               [...pending.values()],
@@ -186,6 +213,9 @@ export function makeTransport(
       openDocument,
       published: Effect.sync(() => published),
       request,
+      whenProjectLoaded: Effect.suspend(() =>
+        loaded ? Effect.void : Deferred.await(projectLoaded),
+      ),
     } satisfies LspConnection;
   });
 }

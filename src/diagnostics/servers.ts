@@ -237,6 +237,9 @@ export function performHandshake(
           ...(config?.workspaceCapabilities === undefined
             ? {}
             : { workspace: config.workspaceCapabilities }),
+          // Opt into server-driven progress so tsserver reports project-load begin/end; intel pulls
+          // Gate on the "end" (see `whenProjectLoaded`), and without this it sends no progress at all.
+          window: { workDoneProgress: true },
         },
         initializationOptions: config?.initializationOptions,
         processId: process.pid,

@@ -202,6 +202,54 @@ test("answers a server-to-client request with the supplied handler's result", as
   expect(echoed).toEqual({ id: 7, jsonrpc: "2.0", result: [{ run: "onType" }] });
 });
 
+test("whenProjectLoaded stays pending until the project-load progress ends", async () => {
+  const phases = await withPeer(({ connection, reply }) =>
+    Effect.gen(function* scenario() {
+      const probe = connection.whenProjectLoaded.pipe(
+        Effect.as("loaded"),
+        Effect.timeout("30 millis"),
+        Effect.catchTag("TimeoutError", () => Effect.succeed("pending")),
+      );
+      // No progress yet: still loading, so the gate holds.
+      const before = yield* probe;
+      yield* reply({
+        jsonrpc: "2.0",
+        method: "$/progress",
+        params: {
+          token: "t",
+          value: { kind: "begin", title: "Initializing JS/TS language features…" },
+        },
+      });
+      // A "begin" alone must not open the gate.
+      const during = yield* probe;
+      yield* reply({
+        jsonrpc: "2.0",
+        method: "$/progress",
+        params: { token: "t", value: { kind: "end" } },
+      });
+      const after = yield* connection.whenProjectLoaded.pipe(
+        Effect.as("loaded"),
+        Effect.timeout("1 second"),
+        Effect.catchTag("TimeoutError", () => Effect.succeed("pending")),
+      );
+      return { after, before, during };
+    }),
+  );
+  expect(phases).toEqual({ after: "loaded", before: "pending", during: "pending" });
+});
+
+test("whenProjectLoaded resolves when the connection closes", async () => {
+  const phase = await withPeer(({ close, connection }) =>
+    close.pipe(
+      Effect.andThen(connection.whenProjectLoaded),
+      Effect.as("loaded"),
+      Effect.timeout("1 second"),
+      Effect.catchTag("TimeoutError", () => Effect.succeed("pending")),
+    ),
+  );
+  expect(phase).toBe("loaded");
+});
+
 test("a closed connection fails an in-flight request instead of hanging", async () => {
   const exit = await withPeer(({ close, connection, sent }) =>
     Effect.all(
