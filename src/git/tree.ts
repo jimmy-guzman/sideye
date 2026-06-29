@@ -106,24 +106,35 @@ export function buildTreeStructure(
   }
 
   sortTree(root);
+  computeFileCounts(root);
   return root.children.map(flattenSingleChildChains);
 }
 
 // The cheap half: overlay the current changed set onto a prebuilt structure,
 // Setting each file's change and re-aggregating directories from it. Runs on every
 // Model update (where counts churn) while the structure above stays cached.
+// Returns stable references when the decorated content is identical so downstream
+// Solid memos (treeRows, focusedRowIndex) skip work proportional to the repo size.
 export function decorateTree(
   nodes: FileTreeNode[],
   changedByPath: Map<string, ChangedFile>,
 ): FileTreeNode[] {
-  return nodes.map((node) => decorateNode(node, changedByPath));
+  const result = nodes.map((node) => decorateNode(node, changedByPath));
+  return result.every((node, i) => node === nodes[i]) ? nodes : result;
 }
 
 function decorateNode(node: FileTreeNode, changedByPath: Map<string, ChangedFile>): FileTreeNode {
   if (node.type === "file") {
-    return { ...node, changed: changedByPath.get(node.path) };
+    const changed = changedByPath.get(node.path);
+    if (changed === node.changed) {
+      return node;
+    }
+    return { ...node, changed };
   }
   const children = node.children.map((child) => decorateNode(child, changedByPath));
+  if (children.every((child, i) => child === node.children[i])) {
+    return node;
+  }
   return { ...node, ...aggregateChildren(children), children };
 }
 
@@ -184,6 +195,17 @@ export function firstFileInNode(node: FileTreeNode): FileNode | undefined {
   }
 
   return undefined;
+}
+
+// Sets fileCount on every directory after the structure is built so that decorateNode can
+// Return stable directory references without losing the count on the first decoration.
+function computeFileCounts(directory: DirectoryNode): number {
+  let count = 0;
+  for (const child of directory.children) {
+    count += child.type === "file" ? 1 : computeFileCounts(child);
+  }
+  directory.fileCount = count;
+  return count;
 }
 
 function makeDirectory(name: string, path: string): DirectoryNode {

@@ -180,7 +180,8 @@ export function mergeChanged(
 ): GitModel {
   if (
     prev.scopeKey === next.scopeKey &&
-    changedSignature(prev.changed) === changedSignature(next.changed)
+    prev.changed.length === next.changed.length &&
+    prev.changed.every((file, i) => sameChangedFile(file, next.changed[i]))
   ) {
     return prev;
   }
@@ -286,7 +287,8 @@ export function mergeModel(prev: GitModel, next: GitModel): GitModel {
     prev.repoRoot === next.repoRoot &&
     prev.scopeKey === next.scopeKey &&
     prev.repoFilesKey === next.repoFilesKey &&
-    changedSignature(prev.changed) === changedSignature(next.changed)
+    prev.changed.length === next.changed.length &&
+    prev.changed.every((file, i) => sameChangedFile(file, next.changed[i]))
   ) {
     return prev;
   }
@@ -341,15 +343,6 @@ export function changedPathsDiffer(previous: ChangedFile[], next: ChangedFile[])
     return true;
   }
   return previous.some((file, index) => file.path !== next[index]?.path);
-}
-
-function changedSignature(files: ChangedFile[]) {
-  return files
-    .map(
-      (file) =>
-        `${file.path}\0${file.kind}\0${file.stage}\0${file.additions}\0${file.deletions}\0${file.mtimeMs}`,
-    )
-    .join("\x01");
 }
 
 let repoFilesCache: { key: string; repoFiles: RepoFile[] } | undefined;
