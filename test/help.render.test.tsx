@@ -34,6 +34,7 @@ describe("help overlay", () => {
       expect(help).toContain("workspace");
       expect(help).toContain("layout");
       expect(help).toContain("go to file: fuzzy-search the whole repo");
+      expect(help).toContain("copy the entire contents of the viewed file");
       expect(help).toContain("toggle the file tree sidebar");
       expect(help).toContain("open in terminal editor");
       expect(help).toContain("open in GUI / IDE");
