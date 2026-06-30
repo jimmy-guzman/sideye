@@ -2,6 +2,10 @@ import type { Theme } from "@/theme/tokens";
 
 export type LogLevel = "error" | "warning" | "success" | "info";
 
+// Notable states (error/warning/success) take their severity token; info is the
+// Neutral baseline (a routine ack, not a diagnostic), so it takes a text role. It
+// Deliberately avoids severity.info, the info-diagnostic color owned by the problems
+// Panel and tree. text.secondary here is intended, not an oversight.
 export function levelColor(colors: Theme, level: LogLevel) {
   return level === "error"
     ? colors.severity.error
