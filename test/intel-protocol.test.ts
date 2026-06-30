@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { normalizeDefinition, normalizeReferences } from "@/intel/protocol";
+import { normalizeDefinition, normalizeHover, normalizeReferences } from "@/intel/protocol";
 
 const uri = pathToFileURL("/repo/src/target.ts").href;
 const path = fileURLToPath(uri);
@@ -62,4 +62,39 @@ test("normalizeReferences maps a Location array and ignores a non-array reply", 
   expect(normalizeReferences([{ range, uri }])).toEqual([{ column: 3, line: 5, path }]);
   expect(normalizeReferences(null)).toEqual([]);
   expect(normalizeReferences({ range, uri })).toEqual([]);
+});
+
+test("normalizeHover returns empty for a null reply", () => {
+  expect(normalizeHover(null)).toBe("");
+});
+
+test("normalizeHover reads a MarkupContent value", () => {
+  expect(normalizeHover({ contents: { kind: "plaintext", value: "const alpha: number" } })).toBe(
+    "const alpha: number",
+  );
+});
+
+test("normalizeHover reads a bare MarkedString", () => {
+  expect(normalizeHover({ contents: "a doc string" })).toBe("a doc string");
+});
+
+test("normalizeHover reads a MarkedString code segment's value", () => {
+  expect(
+    normalizeHover({ contents: { language: "typescript", value: "function f(): void" } }),
+  ).toBe("function f(): void");
+});
+
+test("normalizeHover joins a MarkedString array and skips empty segments", () => {
+  expect(
+    normalizeHover({
+      contents: [{ language: "typescript", value: "const a: 1" }, "", "Docs here."],
+    }),
+  ).toBe("const a: 1\n\nDocs here.");
+});
+
+test("normalizeHover strips markdown code fences and collapses the blank runs", () => {
+  const markdown = "```typescript\nconst alpha: number\n```\n\n\nA constant.";
+  expect(normalizeHover({ contents: { kind: "markdown", value: markdown } })).toBe(
+    "const alpha: number\n\nA constant.",
+  );
 });

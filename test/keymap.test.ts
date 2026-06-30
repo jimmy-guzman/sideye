@@ -142,4 +142,29 @@ describe("createKeyHandler", () => {
 
     expect(state.themeComboboxOpen()).toBe(false);
   });
+
+  test("K requests hover for the symbol under the caret", () => {
+    let calls = 0;
+    const realShowHover = state.showHover;
+    state.showHover = async () => {
+      calls += 1;
+    };
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+    try {
+      handle(keyEvent({ name: "K" }));
+      expect(calls).toBe(1);
+    } finally {
+      state.showHover = realShowHover;
+    }
+  });
+
+  test("escape closes an open caret-anchored decoration", () => {
+    state.openViewerDecoration({ lines: ["const x: 1"], status: "ready" });
+    expect(state.viewerDecoration()).not.toBeUndefined();
+    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+
+    handle(keyEvent({ name: "escape" }));
+
+    expect(state.viewerDecoration()).toBeUndefined();
+  });
 });

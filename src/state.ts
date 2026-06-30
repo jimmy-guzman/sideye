@@ -87,6 +87,28 @@ interface JumpTarget {
   escalate: boolean;
 }
 
+// A caret-anchored viewer overlay (the hover card, later peek/gutters), distinct
+// From the centered command-palette overlays. Content-agnostic on purpose so a
+// Second consumer reuses the same seam; the caret cell it renders at is derived
+// Live in DiffView, not stored here.
+interface ViewerDecoration {
+  status: "loading" | "ready" | "empty" | "error";
+  /** A short card header; omitted for a header-less card. */
+  title?: string;
+  /** Body lines, already normalized to plain text. */
+  lines: string[];
+}
+
+// The caret/scroll/file the decoration opened against; any drift closes it, so the
+// Card never lingers over content it no longer describes.
+interface DecorationAnchor {
+  index: number;
+  column: number;
+  scrollTop: number;
+  scrollX: number;
+  path: string | undefined;
+}
+
 // A one-shot request to place the cursor and scroll once the diff for `path`
 // Has loaded: every navigation enqueues one (a fresh open carries
 // `cursorLine: undefined` -> first change; back/forward and revisits carry the
@@ -297,6 +319,15 @@ function createState() {
   // Scrollbox every frame (it stays the single source of truth for the window).
   const [viewerScrollTop, setViewerScrollTop] = createSignal(0);
   const [viewerScrollX, setViewerScrollX] = createSignal(0);
+  // The active caret-anchored decoration and the anchor it opened against. The
+  // Content is the rendering source; the anchor is an orthogonal watcher that
+  // Closes the card on any caret/scroll/file drift (see the clear effect below).
+  const [viewerDecoration, setViewerDecorationContent] = createSignal<ViewerDecoration | undefined>(
+    undefined,
+  );
+  const [decorationAnchor, setDecorationAnchor] = createSignal<DecorationAnchor | undefined>(
+    undefined,
+  );
   // The viewer's navigation history: tabs of visited Locations plus a per-path
   // MRU viewport. `selectedPath`/`fileView`/the scroll signals stay the live
   // Source of truth the viewer renders; navState records them on leave and
@@ -1188,6 +1219,97 @@ function createState() {
     }
   }
 
+  // Open a caret-anchored decoration, capturing the caret/scroll/file it describes.
+  function openViewerDecoration(content: ViewerDecoration) {
+    batch(() => {
+      setDecorationAnchor({
+        column: cursorColumn(),
+        index: cursorIndex(),
+        path: selectedPath(),
+        scrollTop: viewerScrollTop(),
+        scrollX: viewerScrollX(),
+      });
+      setViewerDecorationContent(content);
+    });
+  }
+
+  // Update an open decoration's content (loading -> ready/empty/error). A no-op
+  // Once the anchor is gone (the caret moved and the clear effect already closed
+  // It), so a late async result can't resurrect a card the user moved past.
+  function resolveViewerDecoration(content: ViewerDecoration) {
+    if (decorationAnchor() !== undefined) {
+      setViewerDecorationContent(content);
+    }
+  }
+
+  function closeViewerDecoration() {
+    batch(() => {
+      setViewerDecorationContent(undefined);
+      setDecorationAnchor(undefined);
+    });
+  }
+
+  let hoverController: AbortController | undefined;
+  // Show type + docs for the symbol under the caret in a caret-anchored card. Same
+  // Read-only pull and guards as `goToDefinition`, but the reply is text into the
+  // Decoration seam instead of a jump; degrades to an empty/error card, never throws.
+  async function showHover() {
+    hoverController?.abort();
+    const path = selectedPath();
+    const line = cursorLineNumber();
+    if (path === undefined || line === undefined) {
+      return;
+    }
+    if (caretWord() === undefined) {
+      notify("move the caret onto a symbol");
+      return;
+    }
+    if (cursorLine()?.newLine === undefined) {
+      notify("nothing to resolve on a removed line");
+      return;
+    }
+    const controller = new AbortController();
+    hoverController = controller;
+    const requestRoot = repoRoot();
+    openViewerDecoration({ lines: [], status: "loading" });
+    try {
+      const text = await runtime.runPromise(
+        Intel.use((intel) =>
+          intel.hover(requestRoot, path, { character: cursorColumn(), line: line - 1 }),
+        ),
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted || repoRoot() !== requestRoot) {
+        return;
+      }
+      resolveViewerDecoration(
+        text === "" ? { lines: [], status: "empty" } : { lines: text.split("\n"), status: "ready" },
+      );
+    } catch {
+      if (!controller.signal.aborted) {
+        resolveViewerDecoration({ lines: [], status: "error" });
+      }
+    }
+  }
+
+  // Close the decoration the instant its caret, scroll, or file drifts: it
+  // Describes one exact spot, so it must not survive a move past it.
+  createEffect(() => {
+    const anchor = decorationAnchor();
+    if (anchor === undefined) {
+      return;
+    }
+    if (
+      cursorIndex() !== anchor.index ||
+      cursorColumn() !== anchor.column ||
+      viewerScrollTop() !== anchor.scrollTop ||
+      viewerScrollX() !== anchor.scrollX ||
+      selectedPath() !== anchor.path
+    ) {
+      closeViewerDecoration();
+    }
+  });
+
   function copy(text: string, message = `copied ${text.split("\n")[0]}`) {
     runtime
       .runPromise(Clipboard.use((clipboard) => clipboard.copy(text)))
@@ -1679,6 +1801,7 @@ function createState() {
     checksRunning,
     closeActiveTab,
     closeThemePicker,
+    closeViewerDecoration,
     collapseSidebar,
     copy,
     copyFileContents,
@@ -1726,6 +1849,7 @@ function createState() {
     now,
     nudgeSidebarWidth,
     openThemePicker,
+    openViewerDecoration,
     overflow,
     overlayLeft,
     overlayWidth,
@@ -1739,6 +1863,7 @@ function createState() {
     repoRoot,
     resetFind,
     resetSidebarWidth,
+    resolveViewerDecoration,
     runChecks,
     scope,
     scopeMenuIndex,
@@ -1810,6 +1935,7 @@ function createState() {
     setWorktreeComboboxQuery,
     setWorktrees,
     showFileContent,
+    showHover,
     sidebarOpen,
     sidebarWidth,
     status,
@@ -1826,6 +1952,7 @@ function createState() {
     togglePinActiveTab,
     treeRows,
     truncated,
+    viewerDecoration,
     viewerHeight,
     viewerScrollTop,
     viewerScrollX,

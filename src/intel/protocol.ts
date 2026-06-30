@@ -99,3 +99,42 @@ export function normalizeDefinition(reply: unknown): NormalizedLocation[] {
 export function normalizeReferences(reply: unknown): NormalizedLocation[] {
   return Array.isArray(reply) ? reply.map(mapItem).filter(isNormalized) : [];
 }
+
+// A `MarkedString` is a bare string or a `{ language, value }` code segment; a
+// `MarkupContent` is `{ kind, value }`. Both expose their text on `.value`.
+function markedText(item: unknown): string {
+  if (typeof item === "string") {
+    return item;
+  }
+  return isObject(item) && typeof item.value === "string" ? item.value : "";
+}
+
+// We render the card as plain lines, so the markdown fences tsserver wraps its
+// Code segments in (```typescript … ```) would show as literal noise; drop the
+// Fence lines and collapse the blank runs they leave behind.
+function stripFences(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("```"))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
+/**
+ * `textDocument/hover` replies with `{ contents, range? }` or null, where `contents` is a
+ * `MarkupContent`, a `MarkedString`, or a `MarkedString[]`. Normalized to trimmed plain text (empty
+ * when there is nothing to show).
+ */
+export function normalizeHover(reply: unknown): string {
+  if (!isObject(reply)) {
+    return "";
+  }
+  const { contents } = reply;
+  const raw = Array.isArray(contents)
+    ? contents
+        .map(markedText)
+        .filter((text) => text.length > 0)
+        .join("\n\n")
+    : markedText(contents);
+  return stripFences(raw).trim();
+}
