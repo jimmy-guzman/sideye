@@ -21,6 +21,7 @@ import { buildEditorCommand } from "./editor/reference";
 import { Editor } from "./editor/service";
 import type { Worktree } from "./git/model";
 import { createKeyHandler } from "./keymap";
+import { logInfo } from "./log/terminal";
 import { runtime } from "./runtime";
 import { state } from "./state";
 import { setAppearance } from "./theme/active";
@@ -84,7 +85,7 @@ export function App() {
     renderer.destroy();
     // Log after destroy so the message lands on the restored screen, not the alt buffer.
     if (message !== undefined) {
-      console.log(message);
+      logInfo(message);
     }
     process.exit(0);
   }
