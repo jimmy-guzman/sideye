@@ -71,12 +71,12 @@ describe("parseArgs", () => {
     expect(result.scope.kind).toBe("all");
   });
 
-  test("throws when --editor has no value", () => {
-    expect(() => parseArgs(["--editor"])).toThrow("--editor requires a non-empty value");
+  test("throws when --editor is empty", () => {
+    expect(() => parseArgs(["--editor", ""])).toThrow("--editor requires a non-empty value");
   });
 
-  test("throws when --ide has no value", () => {
-    expect(() => parseArgs(["--ide"])).toThrow("--ide requires a non-empty value");
+  test("throws when --ide is empty", () => {
+    expect(() => parseArgs(["--ide", ""])).toThrow("--ide requires a non-empty value");
   });
 
   test("editor defaults to undefined when not provided", () => {
@@ -88,7 +88,7 @@ describe("parseArgs", () => {
   });
 
   test("rejects unknown options", () => {
-    expect(() => parseArgs(["--nope"])).toThrow("Unknown option: --nope");
+    expect(() => parseArgs(["--nope"])).toThrow("Unknown option '--nope'");
   });
 });
 
