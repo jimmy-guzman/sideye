@@ -158,13 +158,16 @@ describe("createKeyHandler", () => {
     }
   });
 
-  test("escape closes an open caret-anchored decoration", () => {
+  test("escape closes an open caret-anchored decoration and is swallowed before quit", () => {
     state.openViewerDecoration({ lines: ["const x: 1"], status: "ready" });
     expect(state.viewerDecoration()).not.toBeUndefined();
-    const handle = createKeyHandler({ openInEditor: noop, quit: noop });
+    let quitCount = 0;
+    const handle = createKeyHandler({ openInEditor: noop, quit: () => quitCount++ });
 
     handle(keyEvent({ name: "escape" }));
 
     expect(state.viewerDecoration()).toBeUndefined();
+    // The decoration's esc must early-return before the global esc-quits-the-app path.
+    expect(quitCount).toBe(0);
   });
 });

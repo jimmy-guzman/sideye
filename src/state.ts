@@ -100,13 +100,17 @@ interface ViewerDecoration {
 }
 
 // The caret/scroll/file the decoration opened against; any drift closes it, so the
-// Card never lingers over content it no longer describes.
+// Card never lingers over content it no longer describes. `repoRoot` and `scope`
+// Catch the cases the caret signals miss: a worktree or scope switch can keep the
+// Same selected path, cursor, and scroll yet show an entirely different diff.
 interface DecorationAnchor {
   index: number;
   column: number;
   scrollTop: number;
   scrollX: number;
   path: string | undefined;
+  repoRoot: string;
+  scope: string;
 }
 
 // A one-shot request to place the cursor and scroll once the diff for `path`
@@ -1219,6 +1223,10 @@ function createState() {
     }
   }
 
+  // The active scope's identity, so a scope switch that leaves the path unchanged
+  // Still drifts the anchor off the now-different diff.
+  const scopeIdentity = () => `${scope().kind}:${scope().ref}`;
+
   // Open a caret-anchored decoration, capturing the caret/scroll/file it describes.
   function openViewerDecoration(content: ViewerDecoration) {
     batch(() => {
@@ -1226,6 +1234,8 @@ function createState() {
         column: cursorColumn(),
         index: cursorIndex(),
         path: selectedPath(),
+        repoRoot: repoRoot(),
+        scope: scopeIdentity(),
         scrollTop: viewerScrollTop(),
         scrollX: viewerScrollX(),
       });
@@ -1304,7 +1314,9 @@ function createState() {
       cursorColumn() !== anchor.column ||
       viewerScrollTop() !== anchor.scrollTop ||
       viewerScrollX() !== anchor.scrollX ||
-      selectedPath() !== anchor.path
+      selectedPath() !== anchor.path ||
+      repoRoot() !== anchor.repoRoot ||
+      scopeIdentity() !== anchor.scope
     ) {
       closeViewerDecoration();
     }

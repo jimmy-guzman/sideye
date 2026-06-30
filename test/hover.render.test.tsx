@@ -60,6 +60,18 @@ describe("caret-anchored decoration card", () => {
         (frame) => !frame.includes("const added: number"),
       );
       expect(afterEscape).not.toContain("const added: number");
+
+      // A scope switch can leave the path, caret, and scroll untouched yet show a
+      // Different diff, so it must still close the card. Set scope alone so only the
+      // Scope-drift trigger fires (the card would linger without it).
+      state.openViewerDecoration({ lines: ["const added: number"], status: "ready" });
+      await settleUntil("card reopened", (frame) => frame.includes("const added: number"));
+      state.setScope({ kind: "unstaged", ref: "HEAD" });
+      const afterScope = await settleUntil(
+        "card cleared by a scope switch",
+        (frame) => !frame.includes("const added: number"),
+      );
+      expect(afterScope).not.toContain("const added: number");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

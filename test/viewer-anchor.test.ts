@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import { caretCell, placeCard } from "@/viewer/anchor";
 
-// A 20-row viewport, content offset 6 cells left of the text (a 5-wide gutter plus
-// The diff sign).
-const anchorBase = { contentLeft: 6, scrollX: 0, viewportHeight: 20 };
+// An 80-wide, 20-row viewport, content offset 6 cells left of the text (a 5-wide
+// Gutter plus the diff sign).
+const anchorBase = { contentLeft: 6, scrollX: 0, viewportHeight: 20, viewportWidth: 80 };
 
 describe("caretCell", () => {
   test("maps an on-screen caret to its content-area cell", () => {
@@ -34,6 +34,20 @@ describe("caretCell", () => {
   test("includes the last visible row but excludes the row just past it", () => {
     expect(caretCell({ ...anchorBase, caretFrom: 0, cursorTop: 19, scrollTop: 0 })?.row).toBe(19);
     expect(caretCell({ ...anchorBase, caretFrom: 0, cursorTop: 20, scrollTop: 0 })).toBeUndefined();
+  });
+
+  test("returns undefined when the caret is scrolled off the left edge", () => {
+    // CaretFrom 2, scrollX 5 -> col 6 + 2 - 5 = 3, left of the content (contentLeft 6).
+    expect(
+      caretCell({ ...anchorBase, caretFrom: 2, cursorTop: 8, scrollTop: 0, scrollX: 5 }),
+    ).toBeUndefined();
+  });
+
+  test("returns undefined when the caret is scrolled past the right edge", () => {
+    // In a 20-wide viewport, a word at display column 30 sits well past the right edge.
+    expect(
+      caretCell({ ...anchorBase, caretFrom: 30, cursorTop: 8, scrollTop: 0, viewportWidth: 20 }),
+    ).toBeUndefined();
   });
 });
 

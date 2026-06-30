@@ -35,6 +35,8 @@ describe("help overlay", () => {
       expect(help).toContain("workspace");
       expect(help).toContain("layout");
       expect(help).toContain("go to file: fuzzy-search the whole repo");
+      // The hover shortcut must be listed, or the height bump alone would pass with it gone.
+      expect(help).toContain("hover: type and docs for the symbol under the caret");
       expect(help).toContain("copy the entire contents of the viewed file");
       expect(help).toContain("toggle the file tree sidebar");
       expect(help).toContain("open in terminal editor");

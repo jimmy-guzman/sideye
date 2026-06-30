@@ -12,6 +12,8 @@ export interface CaretAnchorInput {
   scrollTop: number;
   /** Viewer content height (terminal rows). */
   viewportHeight: number;
+  /** Viewer content width (cells). */
+  viewportWidth: number;
   /** Columns left of the line text: the fixed gutter plus the one diff-sign column. */
   contentLeft: number;
   /** The caret word's start display column within the line content. */
@@ -29,15 +31,16 @@ export interface CaretCell {
   col: number;
 }
 
-// The caret's row is its cumulative top minus the scroll; off-screen (above the
-// Fold or past the bottom) yields undefined so the decoration hides rather than
-// Anchoring to a row the user can't see. The column is the content-left offset
-// Plus the word's display column, shifted by the horizontal scroll; it can sit at
-// The content edge, which `placeCard` clamps.
+// The caret's row is its cumulative top minus the scroll, and its column the
+// Content-left offset plus the word's display column shifted by the horizontal
+// Scroll. Off-screen on either axis (above the fold or past the bottom; scrolled
+// Left of the content or past the right edge) yields undefined so the decoration
+// Hides rather than anchoring to a cell the user can't see.
 export function caretCell({
   cursorTop,
   scrollTop,
   viewportHeight,
+  viewportWidth,
   contentLeft,
   caretFrom,
   scrollX,
@@ -46,7 +49,11 @@ export function caretCell({
   if (row < 0 || row >= viewportHeight) {
     return undefined;
   }
-  return { col: contentLeft + caretFrom - scrollX, row };
+  const col = contentLeft + caretFrom - scrollX;
+  if (col < contentLeft || col >= viewportWidth) {
+    return undefined;
+  }
+  return { col, row };
 }
 
 export interface CardPlacementInput {

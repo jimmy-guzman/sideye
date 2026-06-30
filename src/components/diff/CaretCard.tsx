@@ -57,6 +57,7 @@ export function CaretCard(props: {
       scrollTop: state.viewerScrollTop(),
       scrollX: state.viewerScrollX(),
       viewportHeight,
+      viewportWidth,
     });
     if (anchor === undefined) {
       return undefined;
@@ -67,15 +68,18 @@ export function CaretCard(props: {
     const clamped = body.slice(0, MAX_CARD_LINES).map((line) => truncate(line, textWidth));
     const lines = body.length > MAX_CARD_LINES ? [...clamped, "…"] : clamped;
     const contentWidth = Math.max(...lines.map((line) => line.length));
+    // `placeCard` only constrains the left edge, so cap the width here: a pane too
+    // Narrow for even the 8-cell text floor must not let the card run off the right.
+    const width = Math.min(contentWidth + 4, viewportWidth);
     const placement = placeCard({
       anchor,
       cardHeight: lines.length + 2,
-      cardWidth: contentWidth + 4,
+      cardWidth: width,
       viewportHeight,
       viewportWidth,
     });
     const muted = decoration.status !== "ready";
-    return { lines, muted, placement, width: contentWidth + 4 };
+    return { lines, muted, placement, width };
   });
 
   return (
