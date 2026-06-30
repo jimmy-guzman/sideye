@@ -59,16 +59,21 @@ const emptyModel: GitModel = {
 test("shows the empty-repo state when there are no files", async () => {
   seedState(emptyModel, allScope);
 
+  // Wide enough that the subtitle stays on one line in the sidebar column, so the
+  // Assertion proves the sidebar's own copy rather than the viewer's identical
+  // Empty-repo line (which sidebarOf strips out anyway).
   const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
     height: 24,
-    width: 100,
+    width: 120,
   });
   try {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
     const frame = await settleUntil("empty repo sidebar", (current) =>
       sidebarOf(current).includes("no files"),
     );
-    expect(sidebarOf(frame)).toContain("no files");
+    const sidebar = sidebarOf(frame);
+    expect(sidebar).toContain("no files");
+    expect(sidebar).toContain("this repository has no files yet");
   } finally {
     renderer.destroy();
   }
