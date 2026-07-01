@@ -2,6 +2,8 @@ import { existsSync } from "node:fs";
 
 import { Context, Data, Effect, Layer } from "effect";
 
+import { stripGitEnv } from "@/utils/env";
+
 export interface CommandResult {
   exitCode: number;
   stdout: string;
@@ -67,7 +69,9 @@ export const ProcessLive = Layer.succeed(Process)({
             // GIT_OPTIONAL_LOCKS=0 stops git status/diff from refreshing the index
             // (which takes .git/index.lock) and racing a concurrent agent commit.
             // Non-git children ignore the unknown variable, so it is safe globally.
-            env: { ...Bun.env, GIT_OPTIONAL_LOCKS: "0" },
+            // StripGitEnv drops any inherited GIT_DIR/GIT_WORK_TREE/etc (e.g. from a
+            // Launching shell or git hook), so cwd always governs repo discovery.
+            env: { ...stripGitEnv(Bun.env), GIT_OPTIONAL_LOCKS: "0" },
             stderr: "pipe",
             stdout: "pipe",
             ...(options?.stdin === undefined ? {} : { stdin: new Blob([options.stdin]) }),

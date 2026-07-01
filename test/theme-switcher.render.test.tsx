@@ -9,7 +9,7 @@ import { setAppearance, setSelection } from "@/theme/active";
 import { darkTheme } from "@/theme/dark";
 import { registerThemes, resolveThemes, restoreRegistry, snapshotRegistry } from "@/theme/registry";
 
-import { loadModel, makeSettleUntil, seedState } from "./helpers";
+import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
 
 // Unique, easy-to-spot surface backgrounds: the App root paints `surface.base`, so
 // A preview/commit shows up as that color filling the screen.
@@ -65,7 +65,8 @@ describe("theme switcher", () => {
     setSelection(undefined);
     setAppearance("dark");
 
-    const model = await loadModel(process.cwd(), { kind: "all", ref: "HEAD" });
+    const repoRoot = createFixtureRepo("theme-switcher-", { "a.txt": "a\n" });
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
     const { renderer, renderOnce, captureCharFrame, captureSpans, mockInput } = await testRender(
       () => <App />,
@@ -113,7 +114,8 @@ describe("theme switcher", () => {
     setSelection(undefined);
     setAppearance("dark");
 
-    const model = await loadModel(process.cwd(), { kind: "all", ref: "HEAD" });
+    const repoRoot = createFixtureRepo("theme-switcher-", { "a.txt": "a\n" });
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
     const { renderer, renderOnce, captureCharFrame, captureSpans, mockInput, mockMouse } =
       await testRender(() => <App />, { height: 32, width: 120 });

@@ -15,6 +15,7 @@ import { defaultExpandedDirectories, expandAncestorsForPath } from "@/git/tree";
 import type { FileTreeRow } from "@/git/tree";
 import { ProcessLive } from "@/process";
 import { state } from "@/state";
+import { stripGitEnv } from "@/utils/env";
 
 const GitTestLive = GitLive.pipe(Layer.provide(ProcessLive));
 const FileTestLive = FileLive.pipe(Layer.provide(ProcessLive));
@@ -119,6 +120,7 @@ export function runGit(repoRoot: string, args: string[]) {
     ["-c", "user.name=Sideye Test", "-c", "user.email=sideye-test@example.com", ...args],
     {
       cwd: repoRoot,
+      env: stripGitEnv(process.env),
       stdio: "ignore",
     },
   );
