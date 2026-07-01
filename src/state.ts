@@ -44,7 +44,9 @@ import {
   expandAncestorsForPath,
   flattenTree,
 } from "./git/tree";
-import type { HoverSegment } from "./intel/protocol";
+import type { HoverSegment, NormalizedLocation } from "./intel/protocol";
+import { attachReferencePreviews } from "./intel/references";
+import type { ReferenceResult } from "./intel/references";
 import { Intel } from "./intel/service";
 import { levelGlyph } from "./log/levels";
 import type { LogLevel } from "./log/levels";
@@ -309,6 +311,15 @@ function createState() {
   const [searchComboboxScope, setSearchComboboxScope] = createSignal<"changed" | "repo">("changed");
   const [searchComboboxResults, setSearchComboboxResults] = createSignal<SearchMatch[]>([]);
   const [searchComboboxTruncated, setSearchComboboxTruncated] = createSignal(false);
+  const [referencesOpen, setReferencesOpen] = createSignal(false);
+  const [referencesStatus, setReferencesStatus] = createSignal<
+    "loading" | "ready" | "empty" | "error"
+  >("loading");
+  const [referencesResults, setReferencesResults] = createSignal<ReferenceResult[]>([]);
+  const [referencesIndex, setReferencesIndex] = createSignal(0);
+  const [referencesLabel, setReferencesLabel] = createSignal<"references" | "definitions">(
+    "references",
+  );
   const [findOpen, setFindOpen] = createSignal(false);
   const [findActive, setFindActive] = createSignal(false);
   const [findQuery, setFindQuery] = createSignal("");
@@ -1285,6 +1296,16 @@ function createState() {
         notify("definition outside repo");
         return;
       }
+      // More than one definition (e.g. an overloaded symbol) is a pick, not a jump: read
+      // Each target's source line and hand the set to the shared references overlay.
+      if (inRepo.length > 1) {
+        const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
+        if (definitionController !== controller || repoRoot() !== requestRoot) {
+          return;
+        }
+        openReferences("definitions", attachReferencePreviews(inRepo, linesByPath));
+        return;
+      }
       batch(() => {
         selectFile(target.path);
         setJumpTarget({
@@ -1295,9 +1316,6 @@ function createState() {
         });
         setFocusedPane("diff");
       });
-      if (inRepo.length > 1) {
-        notify(`1 of ${inRepo.length} definitions`);
-      }
     } catch {
       if (!controller.signal.aborted) {
         notify("language server unreachable", "error");
@@ -1309,6 +1327,136 @@ function createState() {
         setIntelStatus(undefined);
       }
     }
+  }
+
+  // Read each referenced file's lines once (keyed by path) so the overlay can show a
+  // Source-line preview beside `path:line:col`. Local reads (the LSP resolves against
+  // On-disk files); a missing or binary file yields no lines, so its rows show no preview.
+  function readReferenceLines(
+    root: string,
+    locations: readonly NormalizedLocation[],
+    signal: AbortSignal,
+  ) {
+    const paths = [...new Set(locations.map((location) => location.path))];
+    return runtime.runPromise(
+      File.use((file) =>
+        Effect.all(
+          paths.map((path) =>
+            file
+              .content(root, path, { full: true })
+              .pipe(
+                Effect.map(
+                  (content) =>
+                    [path, content.kind === "text" ? content.content.split("\n") : []] as const,
+                ),
+              ),
+          ),
+        ),
+      ).pipe(Effect.map((entries) => new Map(entries))),
+      { signal },
+    );
+  }
+
+  function resetReferencesState() {
+    setReferencesOpen(false);
+    setReferencesResults([]);
+    setReferencesIndex(0);
+    setReferencesStatus("loading");
+  }
+
+  function openReferences(label: "references" | "definitions", results: ReferenceResult[]) {
+    batch(() => {
+      setReferencesLabel(label);
+      setReferencesResults(results);
+      setReferencesIndex(0);
+      setReferencesStatus("ready");
+      setReferencesOpen(true);
+    });
+  }
+
+  let referencesController: AbortController | undefined;
+  // Find every use of the symbol under the caret via `textDocument/references`. Opens the
+  // Results overlay at once in a loading state, then resolves it in place to the list, an
+  // Empty screen, or an error; read-only, degrades to a notice, never throws.
+  async function findReferences() {
+    referencesController?.abort();
+    const path = selectedPath();
+    const line = cursorLineNumber();
+    if (path === undefined || line === undefined) {
+      return;
+    }
+    if (caretWord() === undefined) {
+      notify("no symbol at caret");
+      return;
+    }
+    if (cursorLine()?.newLine === undefined) {
+      notify("can't resolve a removed line");
+      return;
+    }
+    const controller = new AbortController();
+    referencesController = controller;
+    const requestRoot = repoRoot();
+    batch(() => {
+      setReferencesLabel("references");
+      setReferencesResults([]);
+      setReferencesIndex(0);
+      setReferencesStatus("loading");
+      setReferencesOpen(true);
+    });
+    try {
+      const locations = await runtime.runPromise(
+        Intel.use((intel) =>
+          intel.references(requestRoot, path, { character: cursorColumn(), line: line - 1 }),
+        ),
+        { signal: controller.signal },
+      );
+      // A superseding request or a worktree switch drops this result: the newer request
+      // Owns the overlay, and a stale root would resolve previews against the wrong repo.
+      if (referencesController !== controller || repoRoot() !== requestRoot) {
+        return;
+      }
+      const inRepo = locations.filter((location) => !isAbsolute(location.path));
+      if (inRepo.length === 0) {
+        setReferencesStatus("empty");
+        return;
+      }
+      const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
+      if (referencesController !== controller || repoRoot() !== requestRoot) {
+        return;
+      }
+      openReferences("references", attachReferencePreviews(inRepo, linesByPath));
+    } catch {
+      if (referencesController === controller) {
+        setReferencesStatus("error");
+      }
+    }
+  }
+
+  function closeReferences() {
+    referencesController?.abort();
+    referencesController = undefined;
+    batch(resetReferencesState);
+  }
+
+  // Jump to a result (Enter or a click) and dismiss the overlay, mirroring the search
+  // Overlay's open-a-match path so a reference jump and a search jump behave the same.
+  function jumpToReference(index: number) {
+    const target = referencesResults()[index];
+    if (target === undefined) {
+      return;
+    }
+    referencesController = undefined;
+    batch(() => {
+      selectFile(target.path);
+      setJumpTarget({
+        column: target.column,
+        escalate: true,
+        line: target.line,
+        path: target.path,
+      });
+      setFocusedPane("diff");
+      resetReferencesState();
+    });
   }
 
   // The active scope's identity, so a scope switch that leaves the path unchanged
@@ -1935,6 +2083,7 @@ function createState() {
     checkerState,
     checksRunning,
     closeActiveTab,
+    closeReferences,
     closeThemePicker,
     closeViewerDecoration,
     collapseSidebar,
@@ -1961,6 +2110,7 @@ function createState() {
     findMatches,
     findOpen,
     findQuery,
+    findReferences,
     firstNavigableProblemIndex,
     focusedNodeId,
     focusedPane,
@@ -1974,6 +2124,7 @@ function createState() {
     iconsEnabled,
     ideTemplate,
     jumpTarget,
+    jumpToReference,
     lineMap,
     loadFullContent,
     loadWorktrees,
@@ -1996,6 +2147,11 @@ function createState() {
     problems,
     problemsOpen,
     recencyByPath,
+    referencesIndex,
+    referencesLabel,
+    referencesOpen,
+    referencesResults,
+    referencesStatus,
     repoFilesLoading,
     repoRoot,
     resetFind,
@@ -2051,6 +2207,7 @@ function createState() {
     setPendingRestore,
     setProblemIndex,
     setProblemsOpen,
+    setReferencesIndex,
     setRepoRoot,
     setScope,
     setScopeMenuIndex,

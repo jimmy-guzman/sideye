@@ -10,6 +10,7 @@ import { FileCombobox } from "./components/FileCombobox";
 import { HeaderBar } from "./components/HeaderBar";
 import { HelpDialog } from "./components/HelpDialog";
 import { ProblemsPanel } from "./components/ProblemsPanel";
+import { ReferencesOverlay } from "./components/ReferencesOverlay";
 import { ScopeMenu } from "./components/ScopeMenu";
 import { SearchCombobox } from "./components/SearchCombobox";
 import { Sidebar } from "./components/Sidebar";
@@ -207,6 +208,9 @@ export function App() {
       </Show>
       <Show when={state.searchComboboxOpen()}>
         <SearchCombobox />
+      </Show>
+      <Show when={state.referencesOpen()}>
+        <ReferencesOverlay />
       </Show>
       <Show when={state.worktreeComboboxOpen()}>
         <WorktreeCombobox />
