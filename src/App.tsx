@@ -174,7 +174,7 @@ export function App() {
               ? Effect.sync(() => state.notify("IDE exited with an error", "warning"))
               : Effect.void,
           ),
-          Effect.catch((error) =>
+          Effect.catchTag("EditorError", (error) =>
             Effect.sync(() => state.notify(`couldn't open the IDE: ${error.message}`, "error")),
           ),
         ),
