@@ -79,6 +79,39 @@ describe("history stack", () => {
   });
 });
 
+describe("jump dedup", () => {
+  test("a jump to the current location refreshes in place, not a duplicate", () => {
+    const start = initialNav(loc("a", "jump", { cursorLine: 5 }));
+    const again = navigate(
+      start,
+      loc("a", "jump", { cursorLine: 5, viewport: { scrollTop: 8, scrollX: 0 } }),
+    );
+    expect(again.tabs[0].entries).toHaveLength(1);
+    expect(canBack(again)).toBe(false);
+    // The current entry is refreshed with the new viewport rather than duplicated.
+    expect(currentLocation(again)?.viewport.scrollTop).toBe(8);
+  });
+
+  test("re-navigating to the current entry keeps forward history", () => {
+    const nav = open(open(initialNav(loc("a")), "b"), "c"); // Entries a, b, c at index 2
+    // Go back to "b", then navigate to the same visible "b": a no-op move must not
+    // Truncate the forward "c".
+    const restay = navigate(back(nav), loc("b", "jump", { cursorLine: undefined }));
+    expect(canForward(restay)).toBe(true);
+    expect(currentLocation(forward(restay))?.path).toBe("c");
+  });
+
+  test("jumps to distinct lines in one file stay distinct", () => {
+    const nav = navigate(
+      navigate(initialNav(loc("x")), loc("a", "jump", { cursorLine: 50 })),
+      loc("a", "jump", { cursorLine: 80 }),
+    );
+    expect(currentLocation(nav)?.cursorLine).toBe(80);
+    expect(currentLocation(back(nav))?.cursorLine).toBe(50);
+    expect(currentLocation(back(back(nav)))?.path).toBe("x");
+  });
+});
+
 describe("browse coalescing", () => {
   test("consecutive browse entries collapse into one", () => {
     const nav = open(open(open(initialNav(loc("a")), "b", "browse"), "c", "browse"), "d", "browse");

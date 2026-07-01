@@ -88,4 +88,52 @@ describe("back / forward navigation", () => {
       rmSync(repoRoot, { force: true, recursive: true });
     }
   }, 20_000);
+
+  test("back restores each jump's own target line within one file", async () => {
+    const body = Array.from({ length: 30 }, (_, index) => `const line${index + 1} = ${index + 1}`);
+    const repoRoot = createFixtureRepo("sideye-samefile-jump-", {
+      "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
+      "src/c.ts": `${body.join("\n")}\n`,
+    });
+    // Two hunks far apart (lines 2 and 27), so both jump lines are navigable in the diff.
+    writeFileSync(
+      join(repoRoot, "src", "c.ts"),
+      `${[
+        "const line1 = 1",
+        "const early = true",
+        ...body.slice(2, 26),
+        "const late = true",
+        ...body.slice(27),
+      ].join("\n")}\n`,
+    );
+
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
+    seedState(model, { kind: "all", ref: "HEAD" });
+    const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
+      height: 34,
+      width: 120,
+    });
+    const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
+
+    try {
+      await settleUntil("diff view", (frame) => lnOf(frame) !== undefined, 5);
+
+      // Jump to line 2, then jump to line 27 in the same file (a distinct entry).
+      state.selectFile("src/c.ts", { escalate: true, line: 2 });
+      await settleUntil("first jump", (frame) => frame.includes("src/c.ts") && lnOf(frame) === 2);
+      state.selectFile("src/c.ts", { escalate: true, line: 27 });
+      await settleUntil("second jump", (frame) => frame.includes("src/c.ts") && lnOf(frame) === 27);
+
+      // Back must land on the first jump's line (2), not the file's first change.
+      state.goBack();
+      const back = await settleUntil(
+        "back to first jump line",
+        (frame) => frame.includes("src/c.ts") && lnOf(frame) === 2,
+      );
+      expect(lnOf(back)).toBe(2);
+    } finally {
+      renderer.destroy();
+      rmSync(repoRoot, { force: true, recursive: true });
+    }
+  }, 20_000);
 });

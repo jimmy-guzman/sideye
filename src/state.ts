@@ -880,14 +880,17 @@ function createState() {
     };
   }
 
-  // The Location to arrive at when opening `path` fresh: a revisit restores its
-  // Remembered cursor/scroll from the MRU, a first visit defaults (first change,
-  // Top). `fileView` always resets to the diff, matching the prior selectFile.
-  function arrivingLocation(path: string, kind: "browse" | "jump"): Location {
+  // The Location to arrive at when opening `path` fresh. A jump seeds the entry
+  // With its real target line so back/forward restore it (and the dedup in
+  // `navigate` can tell one jump from another); the column stays undefined so the
+  // Async `jumpTarget` effect snaps the caret to the exact word on landing. Absent
+  // A target, a revisit restores its remembered cursor/scroll from the MRU, a first
+  // Visit defaults (first change, top). `fileView` always resets to the diff.
+  function arrivingLocation(path: string, kind: "browse" | "jump", targetLine?: number): Location {
     const remembered = recall(navState(), path);
     return {
-      cursorColumn: remembered?.cursorColumn,
-      cursorLine: remembered?.cursorLine,
+      cursorColumn: targetLine === undefined ? remembered?.cursorColumn : undefined,
+      cursorLine: targetLine ?? remembered?.cursorLine,
       fileView: false,
       fullContent: fullContentPaths().has(path),
       kind,
@@ -926,30 +929,34 @@ function createState() {
         });
   }
 
-  // All file navigation routes to the single preview tab (Zed's model): a pinned
-  // Tab already showing `path` is focused (no dup); otherwise the preview tab is
-  // Navigated in place (browse coalesces, jump pushes), or a fresh preview tab is
-  // Opened when none exists (e.g. right after a pin).
-  function navigateTo(path: string, kind: "browse" | "jump") {
+  // All file navigation routes to the single preview tab (Zed's model): otherwise
+  // The preview tab is navigated in place (browse coalesces, jump pushes), or a
+  // Fresh preview tab is opened when none exists (e.g. right after a pin). A pinned
+  // Tab already showing `path` is the destination instead of the preview: a plain
+  // Re-focus (no line) just re-activates it, restoring where you were (no dup),
+  // While a line jump navigates within it so the target line seeds that tab's
+  // History and back/forward restore it, like any other jump.
+  function navigateTo(path: string, kind: "browse" | "jump", targetLine?: number) {
     const nav = navState();
     const pinned = nav.tabs.find((tab) => !tab.preview && tab.entries[tab.index]?.path === path);
-    if (pinned !== undefined) {
+    if (pinned !== undefined && targetLine === undefined) {
       activateTab(pinned.id);
       return;
     }
     const leaving = captureCurrent();
-    const arriving = arrivingLocation(path, kind);
+    const arriving = arrivingLocation(path, kind, targetLine);
     const preview = nav.tabs.find((tab) => tab.preview);
-    const id = preview === undefined ? String(nextTabId) : preview.id;
-    if (preview === undefined) {
+    const openingPreview = pinned === undefined && preview === undefined;
+    const destinationId = pinned?.id ?? preview?.id ?? String(nextTabId);
+    if (openingPreview) {
       nextTabId += 1;
     }
     batch(() => {
       setNavState((current) => {
         const recorded = recordLeaving(current, leaving);
-        return preview === undefined
-          ? openTab(recorded, arriving, id, true)
-          : navigate({ ...recorded, activeTabId: preview.id }, arriving);
+        return openingPreview
+          ? openTab(recorded, arriving, destinationId, true)
+          : navigate({ ...recorded, activeTabId: destinationId }, arriving);
       });
       goToLocation(arriving);
     });
@@ -1095,11 +1102,26 @@ function createState() {
     }
   }
 
-  function selectFile(path: string) {
+  // Open a file as a jump (palette, search, go-to-definition, a reference/problem).
+  // A `target` line is the single source of truth for where the jump lands: it
+  // Seeds the history Location (so back/forward restore it) and the transient
+  // `jumpTarget` (which snaps the caret to the column and escalates to file view).
+  function selectFile(
+    path: string,
+    target?: { line: number; column?: number; escalate?: boolean },
+  ) {
     batch(() => {
       setFocusedNodeId(`file:${path}`);
       setExpandedDirectories((current) => expandAncestorsForPath(current, path));
-      navigateTo(path, "jump");
+      navigateTo(path, "jump", target?.line);
+      if (target !== undefined) {
+        setJumpTarget({
+          column: target.column,
+          escalate: target.escalate ?? true,
+          line: target.line,
+          path,
+        });
+      }
     });
   }
 
@@ -1312,13 +1334,7 @@ function createState() {
         return;
       }
       batch(() => {
-        selectFile(target.path);
-        setJumpTarget({
-          column: target.column,
-          escalate: true,
-          line: target.line,
-          path: target.path,
-        });
+        selectFile(target.path, { column: target.column, escalate: true, line: target.line });
         setFocusedPane("diff");
       });
     } catch {
@@ -1464,13 +1480,7 @@ function createState() {
     intelController?.abort();
     intelController = undefined;
     batch(() => {
-      selectFile(target.path);
-      setJumpTarget({
-        column: target.column,
-        escalate: true,
-        line: target.line,
-        path: target.path,
-      });
+      selectFile(target.path, { column: target.column, escalate: true, line: target.line });
       setFocusedPane("diff");
       resetReferencesState();
     });

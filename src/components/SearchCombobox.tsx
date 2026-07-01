@@ -17,9 +17,8 @@ export function SearchCombobox() {
   // Highlighted row) or a click on a specific row.
   function openMatch(match: { path: string; line: number }) {
     batch(() => {
-      state.selectFile(match.path);
+      state.selectFile(match.path, { escalate: true, line: match.line });
       state.setFocusedPane("diff");
-      state.setJumpTarget({ escalate: true, line: match.line, path: match.path });
       state.setSearchComboboxOpen(false);
     });
   }

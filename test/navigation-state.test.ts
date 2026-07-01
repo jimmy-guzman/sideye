@@ -86,6 +86,62 @@ test("opening a file after going back truncates the forward history", () => {
   expect(state.selectedPath()).toBe("b.ts");
 });
 
+test("repeated jumps to the same spot in a file don't stack dead history entries", () => {
+  seed(["a.ts", "b.ts"]);
+  state.selectFile("a.ts");
+  state.selectFile("b.ts", { escalate: true, line: 5 });
+  // A second jump to the very same line (e.g. cycling references/problems that all
+  // Resolve to one location) must not insert a duplicate entry; back still reaches a.ts.
+  state.selectFile("b.ts", { escalate: true, line: 5 });
+
+  state.goBack();
+  expect(state.selectedPath()).toBe("a.ts");
+});
+
+test("a jump seeds the target line, so back restores it rather than the first change", () => {
+  seed(["a.ts", "b.ts"]);
+  state.selectFile("a.ts");
+  state.selectFile("b.ts", { escalate: true, line: 42 });
+  state.selectFile("a.ts");
+
+  state.goBack();
+  expect(state.selectedPath()).toBe("b.ts");
+  expect(state.pendingRestore()?.cursorLine).toBe(42);
+});
+
+test("a line jump into an already-pinned file seeds its history so back restores the prior line", () => {
+  seed(["a.ts", "b.ts"]);
+  state.selectFile("a.ts");
+  state.selectFile("b.ts", { escalate: true, line: 10 }); // Preview history a -> b@10
+  state.togglePinActiveTab(); // Pin b (its current entry is b@10)
+
+  // Jump to b again at a different line; b is the pinned tab's current entry.
+  state.selectFile("b.ts", { escalate: true, line: 42 });
+  expect(state.selectedPath()).toBe("b.ts");
+  expect(state.pendingRestore()?.cursorLine).toBe(42);
+  expect(state.tabItems()).toHaveLength(1); // Still the one pinned tab, no dup
+
+  // Back within the pinned tab returns to the pre-jump line, not the stale entry.
+  state.goBack();
+  expect(state.selectedPath()).toBe("b.ts");
+  expect(state.pendingRestore()?.cursorLine).toBe(10);
+});
+
+test("re-focusing an already-pinned file with no line target keeps its own remembered spot", () => {
+  seed(["a.ts", "b.ts"]);
+  state.selectFile("a.ts", { escalate: true, line: 7 }); // Remember a.ts at line 7
+  state.togglePinActiveTab(); // Pin a.ts
+  state.selectFile("b.ts"); // Fresh preview on b.ts
+  expect(state.tabItems()).toHaveLength(2);
+
+  state.selectFile("a.ts"); // Already pinned, no line -> just refocus, no new tab
+  expect(state.tabItems()).toHaveLength(2);
+  expect(state.selectedPath()).toBe("a.ts");
+  expect(state.tabItems().find((tab) => tab.active)?.preview).toBe(false);
+  // The refocus restores a.ts's remembered line, not a reset to the first change.
+  expect(state.pendingRestore()?.cursorLine).toBe(7);
+});
+
 test("consecutive tree browsing collapses to one history entry", () => {
   seed(["a.ts", "b.ts", "c.ts"]);
   state.selectFile("a.ts");
