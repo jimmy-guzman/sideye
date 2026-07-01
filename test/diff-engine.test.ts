@@ -19,7 +19,7 @@ describe("renderDiff", () => {
   test("parses, highlights, and builds the unified row model from a real patch", async () => {
     const render = await renderDiff({ full: false, maxLines: 1600, patch });
 
-    expect(render.truncated).toBe(false);
+    expect(render.hiddenLines).toBe(0);
     expect(render.navigable).toHaveLength(5);
     expect(render.navigable[1]).toMatchObject({
       content: 'const b = "two";',
@@ -40,9 +40,9 @@ describe("renderDiff", () => {
 
   test("resolves an empty render for an empty patch", async () => {
     expect(await renderDiff({ full: false, maxLines: 1600, patch: "" })).toEqual({
+      hiddenLines: 0,
       navigable: [],
       rows: [],
-      truncated: false,
     });
   });
 

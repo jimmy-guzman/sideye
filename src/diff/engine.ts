@@ -23,7 +23,8 @@ import type { DiffRow, NavigableLine } from "./rows";
 export interface DiffRender {
   rows: DiffRow[];
   navigable: NavigableLine[];
-  truncated: boolean;
+  /** Line rows dropped by the `maxLines` cap (0 when the whole diff fit). */
+  hiddenLines: number;
 }
 
 export interface RenderInput {
@@ -101,7 +102,7 @@ const MAX_CACHE = 40;
 // Render retains every line's text. Cap on approximate bytes too, with the count as a
 // Backstop for many tiny renders.
 const MAX_CACHE_BYTES = 64 * 1024 * 1024;
-const EMPTY: DiffRender = { navigable: [], rows: [], truncated: false };
+const EMPTY: DiffRender = { hiddenLines: 0, navigable: [], rows: [] };
 
 const cache = new Map<string, { render: DiffRender; bytes: number }>();
 let cacheBytes = 0;
@@ -180,11 +181,11 @@ export function structureDiff(input: RenderInput): DiffRender {
   if (meta === undefined) {
     return EMPTY;
   }
-  const { rows, truncated } = buildDiffRows(meta, [], [], {
+  const { hiddenLines, rows } = buildDiffRows(meta, [], [], {
     full: input.full,
     maxLines: input.maxLines,
   });
-  return { navigable: navigableLinesFromRows(rows), rows, truncated };
+  return { hiddenLines, navigable: navigableLinesFromRows(rows), rows };
 }
 
 // Grammars not in LANGS are attached on demand: the file's language is inferred
@@ -275,12 +276,12 @@ async function compute(input: RenderInput): Promise<DiffRender> {
     // Unknown language or highlighter failure: render the rows as plain text.
   }
 
-  const { rows, truncated } = buildDiffRows(meta, addSpans, delSpans, {
+  const { hiddenLines, rows } = buildDiffRows(meta, addSpans, delSpans, {
     full: input.full,
     maxLines: input.maxLines,
   });
 
-  return { navigable: navigableLinesFromRows(rows), rows, truncated };
+  return { hiddenLines, navigable: navigableLinesFromRows(rows), rows };
 }
 
 function evict() {

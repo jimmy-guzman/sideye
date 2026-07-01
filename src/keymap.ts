@@ -315,14 +315,14 @@ export function createKeyHandler(host: HostEffects) {
       if (key.name === "c") {
         const current = state.changesOnly();
         state.setChangesOnly(!current);
-        state.notify(current ? "showing all files" : "showing changes only");
+        state.notify(current ? "all files" : "changes only");
         return;
       }
 
       if (key.name === "z") {
         const wrapping = state.overflow() === "wrap";
         state.setOverflow(wrapping ? "scroll" : "wrap");
-        state.notify(wrapping ? "long lines: scroll" : "long lines: wrap");
+        state.notify(wrapping ? "wrap off" : "wrap on");
         return;
       }
 
@@ -370,8 +370,7 @@ export function createKeyHandler(host: HostEffects) {
       }
 
       if (key.name === "f" && selectedPath !== undefined) {
-        state.setFullContentPaths(new Set(state.fullContentPaths()).add(selectedPath));
-        state.notify(`loaded full content for ${selectedPath}`);
+        state.loadFullContent();
         return;
       }
 

@@ -8,7 +8,7 @@ import { App } from "@/App";
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
 
 describe("re-running checks", () => {
-  test("r reports checks finished once diagnostics complete", async () => {
+  test("r reports checks passed once diagnostics complete", async () => {
     const repoRoot = createFixtureRepo("sideye-recheck-", { "README.md": "# Fixture\n" });
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
@@ -24,10 +24,10 @@ describe("re-running checks", () => {
 
       mockInput.pressKey("r");
       const after = await settleUntil("re-run completion", (frame) =>
-        frame.includes("checks finished"),
+        frame.includes("checks passed"),
       );
-      expect(after).toContain("checks finished");
-      expect(after).not.toContain("running checks…");
+      expect(after).toContain("checks passed");
+      expect(after).not.toContain("checking…");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

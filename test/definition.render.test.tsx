@@ -10,7 +10,7 @@ import { state } from "@/state";
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
 
 // A non-code fixture (.txt) has no language server that provides definition, so
-// `goToDefinition` resolves to "no definition found" at once, without acquiring or
+// `goToDefinition` resolves to "no definition" at once, without acquiring or
 // Spawning a server. That keeps the test hermetic: it never leaves a real LSP
 // Process in the shared runtime (a .ts fixture would spawn typescript-language-server
 // And block on project load). The pull is covered against a fake peer in
@@ -48,7 +48,7 @@ describe("go-to-definition in-flight indicator", () => {
       // End to end: the rendered status bar drops the in-flight indicator and shows
       // The resolved notice with its info glyph, never a stale "resolving" line.
       const settled = await settleUntil("status bar settles to the result", (frame) =>
-        frame.includes("ℹ no definition found"),
+        frame.includes("ℹ no definition"),
       );
       expect(settled).not.toContain("resolving definition…");
     } finally {

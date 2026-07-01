@@ -141,7 +141,11 @@ export function App() {
   ) {
     const template = mode === "ide" ? state.ideTemplate() : state.editorTemplate();
     if (template === undefined) {
-      state.notify("no IDE configured — set 'ide' in config or use --ide");
+      state.notify(
+        mode === "ide"
+          ? "no IDE configured; set 'ide' or --ide"
+          : "no editor configured; set 'editor' or --editor",
+      );
       return;
     }
     const absolutePath = join(state.gitModel().repoRoot, filePath);
@@ -155,7 +159,10 @@ export function App() {
       try {
         await runtime.runPromise(Editor.use((editor) => editor.openTerminal(argv, cwd)));
       } catch (error) {
-        state.notify(error instanceof Error ? error.message : "failed to open editor");
+        state.notify(
+          `couldn't open the editor: ${error instanceof Error ? error.message : String(error)}`,
+          "error",
+        );
       } finally {
         renderer.resume();
       }
@@ -164,10 +171,12 @@ export function App() {
         Editor.use((editor) => editor.openIde(argv, cwd)).pipe(
           Effect.tap((code) =>
             code !== 0
-              ? Effect.sync(() => state.notify(`IDE exited with code ${String(code)}`))
+              ? Effect.sync(() => state.notify("IDE exited with an error", "warning"))
               : Effect.void,
           ),
-          Effect.catch((error) => Effect.sync(() => state.notify(error.message))),
+          Effect.catchTag("EditorError", (error) =>
+            Effect.sync(() => state.notify(`couldn't open the IDE: ${error.message}`, "error")),
+          ),
         ),
       );
     }

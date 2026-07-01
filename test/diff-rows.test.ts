@@ -32,11 +32,11 @@ function sampleMeta(collapsedBefore = 0): DiffMetaInput {
 
 describe("buildDiffRows", () => {
   test("emits unified rows with deletions before additions and tracked line numbers", () => {
-    const { rows, truncated } = buildDiffRows(sampleMeta(), [], [], {
+    const { hiddenLines, rows } = buildDiffRows(sampleMeta(), [], [], {
       full: false,
       maxLines: 1600,
     });
-    expect(truncated).toBe(false);
+    expect(hiddenLines).toBe(0);
     expect(
       rows.map((row) =>
         row.kind === "separator"
@@ -93,13 +93,13 @@ describe("buildDiffRows", () => {
     });
   });
 
-  test("caps body lines at maxLines and flags truncation, ignoring the cap when full", () => {
+  test("caps body lines at maxLines and counts the hidden rest, ignoring the cap when full", () => {
     const capped = buildDiffRows(sampleMeta(), [], [], { full: false, maxLines: 3 });
-    expect(capped.truncated).toBe(true);
+    expect(capped.hiddenLines).toBe(2);
     expect(capped.rows.filter((row) => row.kind === "line")).toHaveLength(3);
 
     const full = buildDiffRows(sampleMeta(), [], [], { full: true, maxLines: 3 });
-    expect(full.truncated).toBe(false);
+    expect(full.hiddenLines).toBe(0);
     expect(full.rows.filter((row) => row.kind === "line")).toHaveLength(5);
   });
 });
