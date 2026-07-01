@@ -45,7 +45,7 @@ import {
   flattenTree,
 } from "./git/tree";
 import type { HoverSegment, NormalizedLocation } from "./intel/protocol";
-import { attachReferencePreviews } from "./intel/references";
+import { attachReferencePreviews, byReferenceOrder } from "./intel/references";
 import type { ReferenceResult } from "./intel/references";
 import { Intel } from "./intel/service";
 import { levelGlyph } from "./log/levels";
@@ -1246,13 +1246,16 @@ function createState() {
     }
   }
 
-  let definitionController: AbortController | undefined;
+  // One controller for both code-intel overlays (definition and references): they share the
+  // Single overlay, so a fresh request of either kind supersedes the other's in-flight pull,
+  // Rather than two uncoordinated controllers clobbering each other's results.
+  let intelController: AbortController | undefined;
   // Jump the viewer to the definition of the symbol under the caret. Read-only LSP pull
   // (`textDocument/definition`) over the warm server pool; degrades to a notice, never throws.
   async function goToDefinition() {
     // A fresh invocation supersedes any in-flight lookup, even when the guards below no-op, so a
     // Stale result can't land a jump after the user has moved on.
-    definitionController?.abort();
+    intelController?.abort();
     const path = selectedPath();
     const line = cursorLineNumber();
     if (path === undefined || line === undefined) {
@@ -1269,7 +1272,7 @@ function createState() {
       return;
     }
     const controller = new AbortController();
-    definitionController = controller;
+    intelController = controller;
     setIntelStatus("resolving definition…");
     const requestRoot = repoRoot();
     try {
@@ -1290,7 +1293,9 @@ function createState() {
       }
       // The service relativizes in-repo paths; an out-of-repo target (e.g. node_modules) stays
       // Absolute and the tree can't open it, so jump to the first in-repo result instead.
-      const inRepo = locations.filter((location) => !isAbsolute(location.path));
+      const inRepo = locations
+        .filter((location) => !isAbsolute(location.path))
+        .toSorted(byReferenceOrder);
       const target = inRepo[0];
       if (target === undefined) {
         notify("definition outside repo");
@@ -1300,7 +1305,7 @@ function createState() {
       // Each target's source line and hand the set to the shared references overlay.
       if (inRepo.length > 1) {
         const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
-        if (definitionController !== controller || repoRoot() !== requestRoot) {
+        if (intelController !== controller || repoRoot() !== requestRoot) {
           return;
         }
         openReferences("definitions", attachReferencePreviews(inRepo, linesByPath));
@@ -1323,7 +1328,7 @@ function createState() {
     } finally {
       // A superseding F12 installs its own controller and indicator, so only the
       // Latest invocation clears the busy state; the aborted one leaves it alone.
-      if (definitionController === controller) {
+      if (intelController === controller) {
         setIntelStatus(undefined);
       }
     }
@@ -1342,15 +1347,16 @@ function createState() {
       File.use((file) =>
         Effect.all(
           paths.map((path) =>
-            file
-              .content(root, path, { full: true })
-              .pipe(
-                Effect.map(
-                  (content) =>
-                    [path, content.kind === "text" ? content.content.split("\n") : []] as const,
-                ),
+            file.content(root, path, { full: true }).pipe(
+              Effect.map(
+                // Split on CRLF too, so a Windows-checkout preview doesn't keep a trailing
+                // \r that trimStart can't remove and that renders as a control glyph.
+                (content) =>
+                  [path, content.kind === "text" ? content.content.split(/\r?\n/) : []] as const,
               ),
+            ),
           ),
+          { concurrency: "unbounded" },
         ),
       ).pipe(Effect.map((entries) => new Map(entries))),
       { signal },
@@ -1379,12 +1385,11 @@ function createState() {
     });
   }
 
-  let referencesController: AbortController | undefined;
   // Find every use of the symbol under the caret via `textDocument/references`. Opens the
   // Results overlay at once in a loading state, then resolves it in place to the list, an
   // Empty screen, or an error; read-only, degrades to a notice, never throws.
   async function findReferences() {
-    referencesController?.abort();
+    intelController?.abort();
     const path = selectedPath();
     const line = cursorLineNumber();
     if (path === undefined || line === undefined) {
@@ -1399,10 +1404,13 @@ function createState() {
       return;
     }
     const controller = new AbortController();
-    referencesController = controller;
+    intelController = controller;
     const requestRoot = repoRoot();
     referencesRoot = requestRoot;
     batch(() => {
+      // References takes over the shared intel slot; drop any definition indicator its
+      // Superseded pull left behind, since this flow shows progress in the overlay instead.
+      setIntelStatus(undefined);
       setReferencesLabel("references");
       setReferencesResults([]);
       setReferencesIndex(0);
@@ -1418,29 +1426,31 @@ function createState() {
       );
       // A superseding request or a worktree switch drops this result: the newer request
       // Owns the overlay, and a stale root would resolve previews against the wrong repo.
-      if (referencesController !== controller || repoRoot() !== requestRoot) {
+      if (intelController !== controller || repoRoot() !== requestRoot) {
         return;
       }
-      const inRepo = locations.filter((location) => !isAbsolute(location.path));
+      const inRepo = locations
+        .filter((location) => !isAbsolute(location.path))
+        .toSorted(byReferenceOrder);
       if (inRepo.length === 0) {
         setReferencesStatus("empty");
         return;
       }
       const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
-      if (referencesController !== controller || repoRoot() !== requestRoot) {
+      if (intelController !== controller || repoRoot() !== requestRoot) {
         return;
       }
       openReferences("references", attachReferencePreviews(inRepo, linesByPath));
     } catch {
-      if (referencesController === controller) {
+      if (intelController === controller) {
         setReferencesStatus("error");
       }
     }
   }
 
   function closeReferences() {
-    referencesController?.abort();
-    referencesController = undefined;
+    intelController?.abort();
+    intelController = undefined;
     batch(resetReferencesState);
   }
 
@@ -1451,7 +1461,8 @@ function createState() {
     if (target === undefined) {
       return;
     }
-    referencesController = undefined;
+    intelController?.abort();
+    intelController = undefined;
     batch(() => {
       selectFile(target.path);
       setJumpTarget({

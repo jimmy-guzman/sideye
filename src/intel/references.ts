@@ -11,6 +11,13 @@ export interface ReferenceResult extends NormalizedLocation {
   text: string;
 }
 
+// The overlay groups by file (a header per path run) and sizes its scrollbox by
+// `rows + files`, both of which assume results are contiguous by path. The LSP does not
+// Promise that order, so sort by path then position to make grouping deterministic.
+export function byReferenceOrder(a: NormalizedLocation, b: NormalizedLocation) {
+  return a.path.localeCompare(b.path) || a.line - b.line || a.column - b.column;
+}
+
 // A location whose file was unreadable (absent from `linesByPath`) or whose 1-based line
 // Is out of range still gets a row, just with an empty preview, rather than being dropped.
 function previewLine(lines: string[] | undefined, line: number): string {

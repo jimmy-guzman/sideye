@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { attachReferencePreviews } from "@/intel/references";
+import { attachReferencePreviews, byReferenceOrder } from "@/intel/references";
 
 const loc = (path: string, line: number, column = 1) => ({ column, line, path });
 
@@ -21,6 +21,21 @@ test("keeps the row with an empty preview when the line is out of range", () => 
   const lines = new Map([["src/a.ts", ["only one line"]]]);
   expect(attachReferencePreviews([loc("src/a.ts", 5)], lines)).toEqual([
     { column: 1, line: 5, path: "src/a.ts", text: "" },
+  ]);
+});
+
+test("byReferenceOrder groups by path, then orders by line and column", () => {
+  const interleaved = [
+    loc("src/b.ts", 1, 1),
+    loc("src/a.ts", 5, 2),
+    loc("src/a.ts", 5, 1),
+    loc("src/a.ts", 2, 9),
+  ];
+  expect(interleaved.toSorted(byReferenceOrder)).toEqual([
+    loc("src/a.ts", 2, 9),
+    loc("src/a.ts", 5, 1),
+    loc("src/a.ts", 5, 2),
+    loc("src/b.ts", 1, 1),
   ]);
 });
 
