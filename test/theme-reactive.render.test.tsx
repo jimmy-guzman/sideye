@@ -8,7 +8,7 @@ import { setAppearance, setSelection } from "@/theme/active";
 import { darkTheme } from "@/theme/dark";
 import { registerThemes, resolveThemes } from "@/theme/registry";
 
-import { loadModel, makeSettleUntil, seedState } from "./helpers";
+import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
 
 // Two themes with unique, easy-to-spot surface backgrounds, one per appearance.
 const DARK_BG = "#010203";
@@ -41,7 +41,8 @@ describe("runtime appearance follow (#101)", () => {
     setSelection({ dark: "t-dark", light: "t-light" });
     setAppearance("dark");
 
-    const model = await loadModel(process.cwd(), { kind: "all", ref: "HEAD" });
+    const repoRoot = createFixtureRepo("theme-reactive-", { "a.txt": "a\n" });
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
 
     const { renderer, renderOnce, captureCharFrame, captureSpans } = await testRender(

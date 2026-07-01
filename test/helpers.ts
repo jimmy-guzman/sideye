@@ -1,5 +1,6 @@
+import { afterEach } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -15,6 +16,7 @@ import { defaultExpandedDirectories, expandAncestorsForPath } from "@/git/tree";
 import type { FileTreeRow } from "@/git/tree";
 import { ProcessLive } from "@/process";
 import { state } from "@/state";
+import { stripGitEnv } from "@/utils/env";
 
 const GitTestLive = GitLive.pipe(Layer.provide(ProcessLive));
 const FileTestLive = FileLive.pipe(Layer.provide(ProcessLive));
@@ -119,13 +121,24 @@ export function runGit(repoRoot: string, args: string[]) {
     ["-c", "user.name=Sideye Test", "-c", "user.email=sideye-test@example.com", ...args],
     {
       cwd: repoRoot,
+      env: stripGitEnv(process.env),
       stdio: "ignore",
     },
   );
 }
 
+const fixtureRepoRoots = new Set<string>();
+
+afterEach(() => {
+  for (const repoRoot of fixtureRepoRoots) {
+    rmSync(repoRoot, { force: true, recursive: true });
+  }
+  fixtureRepoRoots.clear();
+});
+
 export function createFixtureRepo(prefix: string, files: Record<string, string>) {
   const repoRoot = mkdtempSync(join(tmpdir(), prefix));
+  fixtureRepoRoots.add(repoRoot);
 
   for (const [path, content] of Object.entries(files)) {
     mkdirSync(dirname(join(repoRoot, path)), { recursive: true });

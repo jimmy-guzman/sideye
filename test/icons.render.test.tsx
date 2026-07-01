@@ -16,7 +16,10 @@ const CHEVRONS = /[▸▾]/u;
 
 describe("file-type icons", () => {
   test("renders folder glyphs and no chevrons by default", async () => {
-    const model = await loadModel(process.cwd(), { kind: "all", ref: "HEAD" });
+    const repoRoot = createFixtureRepo("icons-default-", {
+      "src/index.ts": "export const a = 1;\n",
+    });
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
     const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
       height: 32,
@@ -33,7 +36,10 @@ describe("file-type icons", () => {
   });
 
   test("--no-icons restores chevrons and drops the folder glyphs", async () => {
-    const model = await loadModel(process.cwd(), { kind: "all", ref: "HEAD" });
+    const repoRoot = createFixtureRepo("icons-no-icons-", {
+      "src/index.ts": "export const a = 1;\n",
+    });
+    const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
     state.setIconsEnabled(false);
     const { renderer, renderOnce, captureCharFrame } = await testRender(() => <App />, {
