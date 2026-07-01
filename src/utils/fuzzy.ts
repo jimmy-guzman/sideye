@@ -24,11 +24,11 @@ function buildCharBag(chars: string[]): bigint {
   for (const raw of chars) {
     const char = raw.toLowerCase();
     if (char >= "a" && char <= "z") {
-      const shift = BigInt((char.codePointAt(0)! - 97) * 2);
+      const shift = BigInt((char.charCodeAt(0) - 97) * 2);
       const count = (bag >> shift) & 3n;
       bag |= (((count << 1n) | 1n) & 3n) << shift;
     } else if (char >= "0" && char <= "9") {
-      bag |= 1n << BigInt(char.codePointAt(0)! - 48 + 52);
+      bag |= 1n << BigInt(char.charCodeAt(0) - 48 + 52);
     } else if (char === "-") {
       bag |= 1n << 62n;
     }
@@ -99,6 +99,12 @@ interface Candidate {
   bag: bigint;
 }
 
+// Well above any repo this app targets (100k files), so a session never
+// Evicts its current file set — only stale entries from paths renamed or
+// Deleted since the process started, which would otherwise accumulate
+// Forever (this module has no reload hook to clear them on a file-set change).
+const CANDIDATE_CACHE_LIMIT = 200_000;
+
 const candidateCache = new Map<string, Candidate>();
 
 function candidateFor(path: string): Candidate {
@@ -110,6 +116,13 @@ function candidateFor(path: string): Candidate {
   const chars = toChars(path);
   const lower = chars.map((char) => char.toLowerCase());
   const candidate = { bag: buildCharBag(lower), chars, lower };
+
+  if (candidateCache.size >= CANDIDATE_CACHE_LIMIT) {
+    const oldestPath = candidateCache.keys().next().value;
+    if (oldestPath !== undefined) {
+      candidateCache.delete(oldestPath);
+    }
+  }
   candidateCache.set(path, candidate);
   return candidate;
 }
