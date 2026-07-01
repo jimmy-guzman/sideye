@@ -9,18 +9,19 @@ import { state } from "@/state";
 
 import { createFixtureRepo, loadModel, makeSettleUntil, seedState } from "./helpers";
 
-// The in-flight indicator is set synchronously inside `goToDefinition`, before the
-// LSP pull is awaited, so this drives the real action but supersedes it with a
-// Guard-failing (line-level caret) invocation to abort the pull, keeping the test
-// Off a real language server. The pull itself is covered against a fake peer in
+// A non-code fixture (.txt) has no language server that provides definition, so
+// `goToDefinition` resolves to "no definition found" at once, without acquiring or
+// Spawning a server. That keeps the test hermetic: it never leaves a real LSP
+// Process in the shared runtime (a .ts fixture would spawn typescript-language-server
+// And block on project load). The pull is covered against a fake peer in
 // Intel-service.test.ts.
 describe("go-to-definition in-flight indicator", () => {
-  test("acknowledges F12 instantly over a held notice, then clears when the pull settles", async () => {
+  test("acknowledges F12 instantly, then the status bar settles to the result", async () => {
     const repoRoot = createFixtureRepo("sideye-def-", {
-      "package.json": `${JSON.stringify({ scripts: { lint: "exit 0", typecheck: "exit 0" } })}\n`,
-      "src/a.ts": "const alpha = 1\n",
+      "notes.txt": "alpha\n",
+      "package.json": `${JSON.stringify({ name: "def-fixture" })}\n`,
     });
-    writeFileSync(join(repoRoot, "src", "a.ts"), "const alpha = 1\nconst added = 2\n");
+    writeFileSync(join(repoRoot, "notes.txt"), "alpha\nbravo charlie\n");
 
     const model = await loadModel(repoRoot, { kind: "all", ref: "HEAD" });
     seedState(model, { kind: "all", ref: "HEAD" });
@@ -31,27 +32,25 @@ describe("go-to-definition in-flight indicator", () => {
     const settleUntil = makeSettleUntil({ captureCharFrame, renderOnce });
 
     try {
-      // Caret lands on `const` (a symbol) on the added line, so the guards pass.
+      // Caret lands on `bravo` (a symbol) on the added line, so the guards pass.
       await settleUntil("caret on the added line", (frame) => /ln 2:1\b/.test(frame));
 
-      // A held acknowledgment occupies the status line first.
-      state.notify("held ack");
-      expect(state.statusRight()).toContain("held ack");
-
-      // F12 sets the busy indicator synchronously (before any await) and it outranks
-      // The held notice: the very keystroke the user is waiting on is acknowledged.
+      // `goToDefinition` sets the indicator synchronously, before the pull is awaited.
+      // The loading state is sub-frame here (no server, so the pull settles at once),
+      // So its exact value is asserted on the model the status bar renders from; the
+      // Rendered info glyph and the clearing are covered by the settled frame below.
       const pending = state.goToDefinition();
       expect(state.statusRight()).toContain("resolving definition…");
       expect(state.statusRightLevel()).toBe("info");
 
-      // A line-level caret has no symbol, so a superseding F12 aborts the in-flight
-      // Pull and returns at the guard without starting a new one (no server needed).
-      state.setCaretLineLevel(true);
-      const superseded = state.goToDefinition();
-      await Promise.all([pending, superseded]);
+      await pending;
 
-      // The settled pull cleared the indicator; the status line is no longer busy.
-      expect(state.statusRight()).not.toContain("resolving definition…");
+      // End to end: the rendered status bar drops the in-flight indicator and shows
+      // The resolved notice with its info glyph, never a stale "resolving" line.
+      const settled = await settleUntil("status bar settles to the result", (frame) =>
+        frame.includes("ℹ no definition found"),
+      );
+      expect(settled).not.toContain("resolving definition…");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });
