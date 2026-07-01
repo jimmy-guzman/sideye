@@ -483,15 +483,12 @@ export function createKeyHandler(host: HostEffects) {
           const item = items[state.problemIndex()];
           if (item?.kind === "problem") {
             const { problem } = item;
-            state.selectFile(problem.path);
-            if (problem.line !== undefined) {
-              state.setJumpTarget({
-                column: problem.column,
-                escalate: true,
-                line: problem.line,
-                path: problem.path,
-              });
-            }
+            state.selectFile(
+              problem.path,
+              problem.line === undefined
+                ? undefined
+                : { column: problem.column, escalate: true, line: problem.line },
+            );
             state.setFocusedPane("diff");
           }
         }

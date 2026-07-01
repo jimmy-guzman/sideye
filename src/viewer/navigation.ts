@@ -124,15 +124,29 @@ export function recordCurrent(nav: NavState, location: Location): NavState {
   );
 }
 
-// Move to a new location in the active tab. A `browse` onto a `browse` head at
-// The end of the stack replaces it in place (so arrowing through the tree is one
-// Entry); anything else pushes, truncating any forward entries (browser semantics).
+// Two entries occupy the same visible spot when they show the same line of the
+// Same file under the same view mode; column is a within-line nicety, not a move.
+function sameVisibleLocation(a: Location, b: Location) {
+  return a.path === b.path && a.cursorLine === b.cursorLine && a.fileView === b.fileView;
+}
+
+// Move to a new location in the active tab. Replace the head entry in place
+// (keeping the index and any forward entries) rather than pushing in two cases:
+// Re-navigating to the head's own visible spot (a jump between references on the
+// Same line — you did not move, so the redo stack stays intact, matching IDE
+// Navigation), or arrowing the tree, where a `browse` onto a `browse` head at the
+// End of the stack collapses into one entry. Anything else pushes, truncating any
+// Forward entries (browser semantics).
 export function navigate(nav: NavState, location: Location): NavState {
   return mapActive(nav, (tab) => {
     const head = tab.entries[tab.index];
-    const coalesce =
-      location.kind === "browse" && head?.kind === "browse" && tab.index === tab.entries.length - 1;
-    if (coalesce) {
+    const replaceHead =
+      head !== undefined &&
+      (sameVisibleLocation(head, location) ||
+        (location.kind === "browse" &&
+          head.kind === "browse" &&
+          tab.index === tab.entries.length - 1));
+    if (replaceHead) {
       return {
         ...tab,
         entries: tab.entries.map((entry, index) => (index === tab.index ? location : entry)),

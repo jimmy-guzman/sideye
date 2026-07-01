@@ -86,6 +86,29 @@ test("opening a file after going back truncates the forward history", () => {
   expect(state.selectedPath()).toBe("b.ts");
 });
 
+test("repeated jumps to the same spot in a file don't stack dead history entries", () => {
+  seed(["a.ts", "b.ts"]);
+  state.selectFile("a.ts");
+  state.selectFile("b.ts", { escalate: true, line: 5 });
+  // A second jump to the very same line (e.g. cycling references/problems that all
+  // Resolve to one location) must not insert a duplicate entry; back still reaches a.ts.
+  state.selectFile("b.ts", { escalate: true, line: 5 });
+
+  state.goBack();
+  expect(state.selectedPath()).toBe("a.ts");
+});
+
+test("a jump seeds the target line, so back restores it rather than the first change", () => {
+  seed(["a.ts", "b.ts"]);
+  state.selectFile("a.ts");
+  state.selectFile("b.ts", { escalate: true, line: 42 });
+  state.selectFile("a.ts");
+
+  state.goBack();
+  expect(state.selectedPath()).toBe("b.ts");
+  expect(state.pendingRestore()?.cursorLine).toBe(42);
+});
+
 test("consecutive tree browsing collapses to one history entry", () => {
   seed(["a.ts", "b.ts", "c.ts"]);
   state.selectFile("a.ts");
