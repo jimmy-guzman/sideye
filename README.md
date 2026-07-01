@@ -163,8 +163,18 @@ whole tree.
 
 Put the caret on a symbol and press `F12` to jump to its definition, backed by
 the same language servers that drive diagnostics. A cross-file jump records your
-spot, so `<` returns to the call site. It's a read-only LSP request, exactly
-like the diagnostics it shares servers with: it never writes to the repo.
+spot, so `<` returns to the call site. When more than one definition matches (an
+overloaded symbol), the targets open in a results list to pick from rather than
+jumping to the first. It's a read-only LSP request, exactly like the diagnostics
+it shares servers with: it never writes to the repo.
+
+### Find references
+
+Put the caret on a symbol and press `Shift+F12` to list everywhere it's used.
+The results open in a palette-family overlay grouped by file, each row showing
+`path:line:col` and its source line. `↑`/`↓` move, `enter` or a click jumps to a
+result, `esc` closes. Same read-only LSP request family as go-to-definition,
+over the same servers.
 
 ### Hover
 
@@ -209,20 +219,21 @@ repo's own, then your `PATH`), so diagnostics work out of the box. Pass
 
 ### viewer
 
-| Key        | Action                                              |
-| ---------- | --------------------------------------------------- |
-| `/`        | find in the viewer; `n`/`N` cycle, `esc` clears     |
-| `ctrl-f`   | search files; `ctrl-a` toggles changes/repo scope   |
-| `v`        | toggle diff <-> full file view for a changed file   |
-| `z`        | toggle long-line wrap in the viewer                 |
-| `f`        | load full content when truncated                    |
-| `ctrl-d/u` | half-page cursor movement in the viewer             |
-| `g` / `G`  | jump to first / last line                           |
-| `F12`      | go to definition of the symbol under the caret      |
-| `K`        | hover: type and docs for the symbol under the caret |
-| `<` / `>`  | back / forward through viewer history               |
-| `y`        | copy `path`, `path:line`, or `path:line:col`        |
-| `Y`        | copy the entire contents of the viewed file         |
+| Key         | Action                                              |
+| ----------- | --------------------------------------------------- |
+| `/`         | find in the viewer; `n`/`N` cycle, `esc` clears     |
+| `ctrl-f`    | search files; `ctrl-a` toggles changes/repo scope   |
+| `v`         | toggle diff <-> full file view for a changed file   |
+| `z`         | toggle long-line wrap in the viewer                 |
+| `f`         | load full content when truncated                    |
+| `ctrl-d/u`  | half-page cursor movement in the viewer             |
+| `g` / `G`   | jump to first / last line                           |
+| `F12`       | go to definition of the symbol under the caret      |
+| `Shift+F12` | find references to the symbol under the caret       |
+| `K`         | hover: type and docs for the symbol under the caret |
+| `<` / `>`   | back / forward through viewer history               |
+| `y`         | copy `path`, `path:line`, or `path:line:col`        |
+| `Y`         | copy the entire contents of the viewed file         |
 
 ### tabs
 

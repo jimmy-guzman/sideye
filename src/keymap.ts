@@ -149,6 +149,27 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
+      // The references overlay owns the keyboard while open. It has no input, so Enter
+      // Jumps to the highlighted result here (the search overlay delegates that to its
+      // Input's onSubmit); nav clamps over the result set, escape closes.
+      if (state.referencesOpen()) {
+        if (key.name === "escape") {
+          state.closeReferences();
+        } else if (key.name === "return") {
+          state.jumpToReference(state.referencesIndex());
+        } else if (key.name === "down" || (key.ctrl && key.name === "n")) {
+          state.setReferencesIndex(
+            Math.min(
+              state.referencesIndex() + 1,
+              Math.max(0, state.referencesResults().length - 1),
+            ),
+          );
+        } else if (key.name === "up" || (key.ctrl && key.name === "p")) {
+          state.setReferencesIndex(Math.max(state.referencesIndex() - 1, 0));
+        }
+        return;
+      }
+
       // A caret-anchored decoration (the hover card) is dismiss-on-esc, claiming the
       // Key before the find and global esc handlers; any caret move already closes it.
       if (state.viewerDecoration() !== undefined && key.name === "escape") {
@@ -392,6 +413,13 @@ export function createKeyHandler(host: HostEffects) {
       // Caret from state and guards itself, so it's safe to dispatch globally.
       if (key.name === "f12" && !key.shift) {
         void state.goToDefinition();
+        return;
+      }
+
+      // Find references to the symbol under the caret (IDE-standard Shift+F12). Opens the
+      // Results overlay; the action reads the caret from state and guards itself.
+      if (key.name === "f12" && key.shift) {
+        void state.findReferences();
         return;
       }
 

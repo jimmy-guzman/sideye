@@ -44,7 +44,9 @@ import {
   expandAncestorsForPath,
   flattenTree,
 } from "./git/tree";
-import type { HoverSegment } from "./intel/protocol";
+import type { HoverSegment, NormalizedLocation } from "./intel/protocol";
+import { attachReferencePreviews, byReferenceOrder } from "./intel/references";
+import type { ReferenceResult } from "./intel/references";
 import { Intel } from "./intel/service";
 import { levelGlyph } from "./log/levels";
 import type { LogLevel } from "./log/levels";
@@ -309,6 +311,15 @@ function createState() {
   const [searchComboboxScope, setSearchComboboxScope] = createSignal<"changed" | "repo">("changed");
   const [searchComboboxResults, setSearchComboboxResults] = createSignal<SearchMatch[]>([]);
   const [searchComboboxTruncated, setSearchComboboxTruncated] = createSignal(false);
+  const [referencesOpen, setReferencesOpen] = createSignal(false);
+  const [referencesStatus, setReferencesStatus] = createSignal<
+    "loading" | "ready" | "empty" | "error"
+  >("loading");
+  const [referencesResults, setReferencesResults] = createSignal<ReferenceResult[]>([]);
+  const [referencesIndex, setReferencesIndex] = createSignal(0);
+  const [referencesLabel, setReferencesLabel] = createSignal<"references" | "definitions">(
+    "references",
+  );
   const [findOpen, setFindOpen] = createSignal(false);
   const [findActive, setFindActive] = createSignal(false);
   const [findQuery, setFindQuery] = createSignal("");
@@ -1235,13 +1246,16 @@ function createState() {
     }
   }
 
-  let definitionController: AbortController | undefined;
+  // One controller for both code-intel overlays (definition and references): they share the
+  // Single overlay, so a fresh request of either kind supersedes the other's in-flight pull,
+  // Rather than two uncoordinated controllers clobbering each other's results.
+  let intelController: AbortController | undefined;
   // Jump the viewer to the definition of the symbol under the caret. Read-only LSP pull
   // (`textDocument/definition`) over the warm server pool; degrades to a notice, never throws.
   async function goToDefinition() {
     // A fresh invocation supersedes any in-flight lookup, even when the guards below no-op, so a
     // Stale result can't land a jump after the user has moved on.
-    definitionController?.abort();
+    intelController?.abort();
     const path = selectedPath();
     const line = cursorLineNumber();
     if (path === undefined || line === undefined) {
@@ -1258,7 +1272,7 @@ function createState() {
       return;
     }
     const controller = new AbortController();
-    definitionController = controller;
+    intelController = controller;
     setIntelStatus("resolving definition…");
     const requestRoot = repoRoot();
     try {
@@ -1279,10 +1293,22 @@ function createState() {
       }
       // The service relativizes in-repo paths; an out-of-repo target (e.g. node_modules) stays
       // Absolute and the tree can't open it, so jump to the first in-repo result instead.
-      const inRepo = locations.filter((location) => !isAbsolute(location.path));
+      const inRepo = locations
+        .filter((location) => !isAbsolute(location.path))
+        .toSorted(byReferenceOrder);
       const target = inRepo[0];
       if (target === undefined) {
         notify("definition outside repo");
+        return;
+      }
+      // More than one definition (e.g. an overloaded symbol) is a pick, not a jump: read
+      // Each target's source line and hand the set to the shared references overlay.
+      if (inRepo.length > 1) {
+        const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
+        if (intelController !== controller || repoRoot() !== requestRoot) {
+          return;
+        }
+        openReferences("definitions", attachReferencePreviews(inRepo, linesByPath));
         return;
       }
       batch(() => {
@@ -1295,9 +1321,6 @@ function createState() {
         });
         setFocusedPane("diff");
       });
-      if (inRepo.length > 1) {
-        notify(`1 of ${inRepo.length} definitions`);
-      }
     } catch {
       if (!controller.signal.aborted) {
         notify("language server unreachable", "error");
@@ -1305,11 +1328,163 @@ function createState() {
     } finally {
       // A superseding F12 installs its own controller and indicator, so only the
       // Latest invocation clears the busy state; the aborted one leaves it alone.
-      if (definitionController === controller) {
+      if (intelController === controller) {
         setIntelStatus(undefined);
       }
     }
   }
+
+  // Read each referenced file's lines once (keyed by path) so the overlay can show a
+  // Source-line preview beside `path:line:col`. Local reads (the LSP resolves against
+  // On-disk files); a missing or binary file yields no lines, so its rows show no preview.
+  function readReferenceLines(
+    root: string,
+    locations: readonly NormalizedLocation[],
+    signal: AbortSignal,
+  ) {
+    const paths = [...new Set(locations.map((location) => location.path))];
+    return runtime.runPromise(
+      File.use((file) =>
+        Effect.all(
+          paths.map((path) =>
+            file.content(root, path, { full: true }).pipe(
+              Effect.map(
+                // Split on CRLF too, so a Windows-checkout preview doesn't keep a trailing
+                // \r that trimStart can't remove and that renders as a control glyph.
+                (content) =>
+                  [path, content.kind === "text" ? content.content.split(/\r?\n/) : []] as const,
+              ),
+            ),
+          ),
+          { concurrency: "unbounded" },
+        ),
+      ).pipe(Effect.map((entries) => new Map(entries))),
+      { signal },
+    );
+  }
+
+  function resetReferencesState() {
+    setReferencesOpen(false);
+    setReferencesResults([]);
+    setReferencesIndex(0);
+    setReferencesStatus("loading");
+  }
+
+  // The repoRoot the open overlay's results belong to, captured on open so the drift
+  // Effect below can close it when a worktree switch moves off that repo.
+  let referencesRoot: string | undefined;
+
+  function openReferences(label: "references" | "definitions", results: ReferenceResult[]) {
+    referencesRoot = repoRoot();
+    batch(() => {
+      setReferencesLabel(label);
+      setReferencesResults(results);
+      setReferencesIndex(0);
+      setReferencesStatus("ready");
+      setReferencesOpen(true);
+    });
+  }
+
+  // Find every use of the symbol under the caret via `textDocument/references`. Opens the
+  // Results overlay at once in a loading state, then resolves it in place to the list, an
+  // Empty screen, or an error; read-only, degrades to a notice, never throws.
+  async function findReferences() {
+    intelController?.abort();
+    const path = selectedPath();
+    const line = cursorLineNumber();
+    if (path === undefined || line === undefined) {
+      return;
+    }
+    if (caretWord() === undefined) {
+      notify("no symbol at caret");
+      return;
+    }
+    if (cursorLine()?.newLine === undefined) {
+      notify("can't resolve a removed line");
+      return;
+    }
+    const controller = new AbortController();
+    intelController = controller;
+    const requestRoot = repoRoot();
+    referencesRoot = requestRoot;
+    batch(() => {
+      // References takes over the shared intel slot; drop any definition indicator its
+      // Superseded pull left behind, since this flow shows progress in the overlay instead.
+      setIntelStatus(undefined);
+      setReferencesLabel("references");
+      setReferencesResults([]);
+      setReferencesIndex(0);
+      setReferencesStatus("loading");
+      setReferencesOpen(true);
+    });
+    try {
+      const locations = await runtime.runPromise(
+        Intel.use((intel) =>
+          intel.references(requestRoot, path, { character: cursorColumn(), line: line - 1 }),
+        ),
+        { signal: controller.signal },
+      );
+      // A superseding request or a worktree switch drops this result: the newer request
+      // Owns the overlay, and a stale root would resolve previews against the wrong repo.
+      if (intelController !== controller || repoRoot() !== requestRoot) {
+        return;
+      }
+      const inRepo = locations
+        .filter((location) => !isAbsolute(location.path))
+        .toSorted(byReferenceOrder);
+      if (inRepo.length === 0) {
+        setReferencesStatus("empty");
+        return;
+      }
+      const linesByPath = await readReferenceLines(requestRoot, inRepo, controller.signal);
+      if (intelController !== controller || repoRoot() !== requestRoot) {
+        return;
+      }
+      openReferences("references", attachReferencePreviews(inRepo, linesByPath));
+    } catch {
+      if (intelController === controller) {
+        setReferencesStatus("error");
+      }
+    }
+  }
+
+  function closeReferences() {
+    intelController?.abort();
+    intelController = undefined;
+    batch(resetReferencesState);
+  }
+
+  // Jump to a result (Enter or a click) and dismiss the overlay, mirroring the search
+  // Overlay's open-a-match path so a reference jump and a search jump behave the same.
+  function jumpToReference(index: number) {
+    const target = referencesResults()[index];
+    if (target === undefined) {
+      return;
+    }
+    intelController?.abort();
+    intelController = undefined;
+    batch(() => {
+      selectFile(target.path);
+      setJumpTarget({
+        column: target.column,
+        escalate: true,
+        line: target.line,
+        path: target.path,
+      });
+      setFocusedPane("diff");
+      resetReferencesState();
+    });
+  }
+
+  // The overlay lists repo-specific paths, so a repoRoot change (a worktree switch, or
+  // The deleted-worktree recovery) leaves it showing files from the old worktree. Close
+  // It on that drift; closeReferences aborts any in-flight request, the way the caret
+  // Decoration clears when its anchor drifts.
+  createEffect(() => {
+    if (referencesOpen() && repoRoot() !== referencesRoot) {
+      closeReferences();
+    }
+  });
 
   // The active scope's identity, so a scope switch that leaves the path unchanged
   // Still drifts the anchor off the now-different diff.
@@ -1935,6 +2110,7 @@ function createState() {
     checkerState,
     checksRunning,
     closeActiveTab,
+    closeReferences,
     closeThemePicker,
     closeViewerDecoration,
     collapseSidebar,
@@ -1961,6 +2137,7 @@ function createState() {
     findMatches,
     findOpen,
     findQuery,
+    findReferences,
     firstNavigableProblemIndex,
     focusedNodeId,
     focusedPane,
@@ -1974,6 +2151,7 @@ function createState() {
     iconsEnabled,
     ideTemplate,
     jumpTarget,
+    jumpToReference,
     lineMap,
     loadFullContent,
     loadWorktrees,
@@ -1996,6 +2174,11 @@ function createState() {
     problems,
     problemsOpen,
     recencyByPath,
+    referencesIndex,
+    referencesLabel,
+    referencesOpen,
+    referencesResults,
+    referencesStatus,
     repoFilesLoading,
     repoRoot,
     resetFind,
@@ -2051,6 +2234,7 @@ function createState() {
     setPendingRestore,
     setProblemIndex,
     setProblemsOpen,
+    setReferencesIndex,
     setRepoRoot,
     setScope,
     setScopeMenuIndex,
