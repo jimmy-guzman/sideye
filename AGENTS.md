@@ -21,6 +21,7 @@ See `README.md` for what sideye does, its keys, and its non-goals; see `SPEC.md`
 - Pin every `dependencies` and `devDependencies` entry to an exact version (no `^`/`~`). sideye ships as a compiled binary (`private: true`, `bun build --compile`), so the manifest mirrors the lock and every bump is an explicit, reviewable edit; caret ranges only help library consumers dedupe, which never applies here.
 - Lint and format are oxlint and oxfmt (`bun run lint`, `bun run format`); do not add ESLint or Prettier.
 - Dead exports are caught by knip (`bun run knip`, also part of `bun run check`). Remove the `export` keyword rather than suppressing.
+- Git hooks run through lefthook (`lefthook.yml`, wired up automatically by its own postinstall on every `bun install`, no extra step). `pre-commit` runs on staged files only: both format and lint auto-fix and re-stage (oxlint's `--fix` only applies safe, unambiguous fixes), and anything neither can safely fix still blocks the commit. `pre-push` runs the existing `bun run check` once, unabridged, since typecheck and knip need the whole project graph. Agents run the same hooks as humans; no skip/bypass config is layered on top of git's own `--no-verify` or lefthook's `LEFTHOOK=0`.
 - Use `===` and `!==`; never `== null` or `!= null`.
 - No explicit return type annotations unless needed for exported API clarity, recursion, overloads, or inference limits.
 - Rely on type inference; avoid explicit annotations or interfaces unless needed for exports or clarity, and inline single-use values rather than naming them.
@@ -137,6 +138,6 @@ Do not implement a web preview, PR workflow, accept/reject protocol, agent integ
 - `bun run check`: default pre-submit command.
 - `bun run build`: Bun compile smoke check.
 - `bun run src/main.tsx --help`: CLI smoke check.
-- `bun install` after package or lockfile changes.
+- `bun install` after package or lockfile changes — this also installs git hooks via lefthook automatically (no manual `lefthook install` step, and worktrees share the main checkout's `.git` hooks path so nothing worktree-specific is needed).
 - Add focused tests for git parsing, CLI argument handling, JSON-RPC framing, LSP-to-diagnostic mapping, diagnostic state transitions, and copy-reference formatting. Keep OpenTUI rendering tests separate from pure parsing/state tests where practical. Server-coupled paths (transport correlation, the diagnostics service) test against a fake in-process protocol peer, not a mock of our own code; reserve a real `typescript-language-server` for an end-to-end check.
 - Diagnostics auto-provision a missing language server (repo-local → PATH → a one-time download into `~/.cache/sideye/lsp`), so they work out-of-the-box; the `--no-lsp-download` flag / `SIDEYE_NO_LSP_DOWNLOAD` opts out. Tests must never trigger a real download: the `test/setup.ts` preload sets `SIDEYE_NO_LSP_DOWNLOAD`, and the provisioner's own tests drive a fake installer and restore that default.

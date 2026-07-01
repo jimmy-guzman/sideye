@@ -350,6 +350,9 @@ bun run check            # tests + typecheck
 bun run build:dist       # build standalone binaries for all targets
 ```
 
+`bun install` also wires up git hooks (via [lefthook](https://lefthook.dev)):
+`pre-commit` formats and lints staged files, `pre-push` re-runs `bun run check`.
+
 ## Non-goals
 
 `sideye` is deliberately not an agent integration.

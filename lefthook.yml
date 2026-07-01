@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/evilmartians/lefthook/master/schema.json
+no_tty: true
+assert_lefthook_installed: true
+
+pre-commit:
+  commands:
+    format:
+      run: bunx oxfmt {staged_files} --no-error-on-unmatched-pattern
+      stage_fixed: true
+    lint:
+      run: bunx oxlint --fix --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+
+pre-push:
+  commands:
+    check:
+      run: bun run check
