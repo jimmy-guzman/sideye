@@ -33,11 +33,13 @@ test("an error notice carries the error level for the status bar to color", () =
 
 // A createEffect in state re-stamps `now` to the real clock whenever activity is
 // Recorded (it keeps the "Ns ago" label live), so these tests record at real time.
-// Status() is a process-wide signal other suites may leave non-empty, so these
-// Assert only on the activity substring, never on the ambient status trailing it.
+// Status() is a process-wide signal other suites may leave set (a long diagnostics
+// Error, say), and it trails the path behind " · ", eating into the path's budget.
+// So these use a generous width and a path far longer than any realistic budget:
+// The path always truncates (leading "…") yet keeps ample room for the filename.
 test("a long recent path is shortened from the front, keeping the filename", () => {
-  state.setTerminalWidth(160);
-  const deep = `src/${"components/".repeat(40)}DiffView.tsx`;
+  state.setTerminalWidth(400);
+  const deep = `src/${"components/".repeat(50)}DiffView.tsx`;
   state.setActivityLog(
     recordActivity(emptyActivityLog, [{ kind: "changed", path: deep }], Date.now()),
   );
@@ -49,7 +51,7 @@ test("a long recent path is shortened from the front, keeping the filename", () 
 });
 
 test("a short recent path is shown whole", () => {
-  state.setTerminalWidth(200);
+  state.setTerminalWidth(300);
   state.setActivityLog(
     recordActivity(emptyActivityLog, [{ kind: "changed", path: "src/foo.ts" }], Date.now()),
   );
