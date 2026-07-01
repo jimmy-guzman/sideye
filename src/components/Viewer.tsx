@@ -317,6 +317,26 @@ export function Viewer() {
           <DiffView />
         </Show>
       </Show>
+      {/* A partially-loaded file reserves this row (viewerHeight already shrank by
+          it) rather than crowding the transient status bar: the affordance sits at
+          the content it describes. The whole row loads the rest, mirroring the `f`
+          key. Non-selectable so a click never starts a text highlight. */}
+      <Show when={state.truncated()}>
+        <box
+          height={1}
+          flexDirection="row"
+          paddingLeft={1}
+          paddingRight={1}
+          backgroundColor={theme.colors.surface.panel}
+          onMouseDown={() => state.loadFullContent()}
+        >
+          <text ref={(el) => (el.selectable = false)} fg={theme.colors.text.muted}>
+            {`⋯ ${state.truncatedHidden()} more ${
+              state.truncatedHidden() === 1 ? "line" : "lines"
+            } · f to load`}
+          </text>
+        </box>
+      </Show>
     </box>
   );
 }

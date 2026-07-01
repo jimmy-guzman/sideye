@@ -650,8 +650,23 @@ function createState() {
   const truncated = createMemo(() => {
     const content = diffView()?.fileContent;
     return (
-      (diffView()?.render.truncated ?? false) || (content?.kind === "text" && content.truncated)
+      (diffView()?.render.hiddenLines ?? 0) > 0 || (content?.kind === "text" && content.truncated)
     );
+  });
+  // Line rows the cap hid, for the "N more lines" footer. In file-content mode the
+  // True total is the file's own line count (the render is built from an
+  // Already-capped slice), so measure the hidden count against what's shown; a diff
+  // Has no larger total, so its own dropped-row count is exact.
+  const truncatedHidden = createMemo(() => {
+    const view = diffView();
+    if (view === undefined) {
+      return 0;
+    }
+    const content = view.fileContent;
+    if (content?.kind === "text" && content.truncated) {
+      return Math.max(0, content.lineCount - view.render.navigable.length);
+    }
+    return view.render.hiddenLines;
   });
 
   // In-buffer find: row indices into navigableLines whose content matches the
@@ -692,7 +707,10 @@ function createState() {
   // --- layout (derived from terminal dimensions) ---
   const problemsHeight = createMemo(() => (problemsOpen() ? PROBLEMS_HEIGHT : 0));
   const paneHeight = createMemo(() => Math.max(1, terminalHeight() - 4 - problemsHeight()));
-  const viewerHeight = createMemo(() => Math.max(1, paneHeight() - 1));
+  // A truncated file reserves one row for the "N more lines" footer, so the diff
+  // Content shrinks by it; DiffView derives its whole windowing from this height,
+  // So the single subtraction keeps the slice and scroll math correct.
+  const viewerHeight = createMemo(() => Math.max(1, paneHeight() - 1 - (truncated() ? 1 : 0)));
   // A manual width is stored raw and only clamped here, so it never overflows a
   // Shrunken terminal yet is restored intact when the terminal grows back. The
   // Responsive default and a manual override share the same clamp, so the
@@ -755,10 +773,20 @@ function createState() {
     const value = counts();
     return `${value.errors > 0 ? `${levelGlyph("error")}${value.errors}` : ""}${value.warnings > 0 ? ` ${levelGlyph("warning")}${value.warnings}` : ""}`.trim();
   });
+  // The status bar's left key hints, keyed to the active mode. Lives here (not in
+  // The StatusBar component) so the right-status budget below can reserve the exact
+  // Width the hint takes, instead of a hardcoded copy that drifts from the render.
+  const statusHint = createMemo(() =>
+    findOpen()
+      ? "type to find · enter confirm · esc cancel"
+      : findActive()
+        ? "n/N next/prev · esc clear find"
+        : "? keys · q quit",
+  );
   const statusRightModel = createMemo(() => {
-    const hints = "? keys · q quit";
-    const width = Math.max(10, Math.min(terminalWidth() - 50, terminalWidth() - hints.length - 4));
-    // Leave room for the leading level glyph + space the status bar prepends.
+    // Reserve the left hint plus the bar's two paddings and a gap between the halves;
+    // What remains is the right status's, less the leading level glyph + space it prepends.
+    const width = Math.max(10, terminalWidth() - statusHint().length - 4);
     const textWidth = Math.max(1, width - 2);
     // An in-flight code-intel pull outranks even a held acknowledgment: it is the
     // Acknowledgment of the very keystroke the user is waiting on, so it stays until
@@ -785,11 +813,9 @@ function createState() {
       latest === undefined || now() - latest.at >= RECENT_MS
         ? ""
         : `${Math.max(0, Math.round((now() - latest.at) / 1000))}s ago ${latest.path}`;
-    const displayStatus = checksRunning() ? "running checks…" : status();
+    const displayStatus = checksRunning() ? "checking…" : status();
     const text = truncate(
-      [activityText, truncated() ? `${displayStatus} · truncated; f for full` : displayStatus]
-        .filter((part) => part !== "")
-        .join(" · "),
+      [activityText, displayStatus].filter((part) => part !== "").join(" · "),
       textWidth,
     );
     // A glyph belongs only to an actual status message. Activity alone is ambient
@@ -1169,7 +1195,7 @@ function createState() {
         { signal: controller.signal },
       );
       report(
-        failures[0] ?? installing ?? "checks finished",
+        failures[0] ?? installing ?? "checks passed",
         failures[0] !== undefined ? "error" : installing !== undefined ? "info" : "success",
       );
     } catch {
@@ -1224,11 +1250,11 @@ function createState() {
     // The caret must sit on a symbol in the current file's text: a gap or line-level caret has no
     // Position to resolve, and a removed (old-only) line isn't in the file the server reads.
     if (caretWord() === undefined) {
-      notify("move the caret onto a symbol");
+      notify("no symbol at caret");
       return;
     }
     if (cursorLine()?.newLine === undefined) {
-      notify("nothing to resolve on a removed line");
+      notify("can't resolve a removed line");
       return;
     }
     const controller = new AbortController();
@@ -1248,7 +1274,7 @@ function createState() {
         return;
       }
       if (locations.length === 0) {
-        notify("no definition found");
+        notify("no definition");
         return;
       }
       // The service relativizes in-repo paths; an out-of-repo target (e.g. node_modules) stays
@@ -1256,7 +1282,7 @@ function createState() {
       const inRepo = locations.filter((location) => !isAbsolute(location.path));
       const target = inRepo[0];
       if (target === undefined) {
-        notify("definition is outside the repo");
+        notify("definition outside repo");
         return;
       }
       batch(() => {
@@ -1270,11 +1296,11 @@ function createState() {
         setFocusedPane("diff");
       });
       if (inRepo.length > 1) {
-        notify(`${inRepo.length} definitions`);
+        notify(`1 of ${inRepo.length} definitions`);
       }
     } catch {
       if (!controller.signal.aborted) {
-        notify("couldn't reach the language server", "error");
+        notify("language server unreachable", "error");
       }
     } finally {
       // A superseding F12 installs its own controller and indicator, so only the
@@ -1334,11 +1360,11 @@ function createState() {
       return;
     }
     if (caretWord() === undefined) {
-      notify("move the caret onto a symbol");
+      notify("no symbol at caret");
       return;
     }
     if (cursorLine()?.newLine === undefined) {
-      notify("nothing to resolve on a removed line");
+      notify("can't resolve a removed line");
       return;
     }
     const controller = new AbortController();
@@ -1413,7 +1439,7 @@ function createState() {
       .runPromise(Clipboard.use((clipboard) => clipboard.copy(text)))
       .then(() => notify(message, "success"))
       .catch((error: unknown) =>
-        notify(error instanceof Error ? error.message : String(error), "error"),
+        notify(`couldn't copy: ${error instanceof Error ? error.message : String(error)}`, "error"),
       );
   }
 
@@ -1443,11 +1469,22 @@ function createState() {
           copy(content.content, `copied ${path}`);
           return;
         }
-        notify(`can't copy ${path} (${content.kind})`, "warning");
+        notify(`can't copy ${content.kind} file`, "warning");
       })
       .catch((error: unknown) =>
-        notify(error instanceof Error ? error.message : String(error), "error"),
+        notify(`couldn't copy: ${error instanceof Error ? error.message : String(error)}`, "error"),
       );
+  }
+
+  // Opt the current path out of the truncation cap for a full re-read. Reached by
+  // The `f` key and the truncation footer's click; the footer clearing and the
+  // Content growing are the acknowledgment, so it stays silent.
+  function loadFullContent() {
+    const path = selectedPath();
+    if (path === undefined) {
+      return;
+    }
+    setFullContentPaths(new Set(fullContentPaths()).add(path));
   }
 
   function loadWorktrees(root: string) {
@@ -1474,7 +1511,7 @@ function createState() {
         batch(() => {
           setWorktreeComboboxOpen(false);
           report(
-            error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error),
+            `couldn't list worktrees: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
             "error",
           );
         });
@@ -1587,7 +1624,7 @@ function createState() {
       return;
     }
     if (!existsSync(worktree.path)) {
-      report(`worktree missing: ${worktree.path}`, "warning");
+      report(`missing worktree: ${worktree.path}`, "warning");
       return;
     }
     // The load is async, so a second switch started before the first resolves
@@ -1640,7 +1677,7 @@ function createState() {
         setCheckerState(initialCheckerState(fresh.changed));
         setActivityLog(emptyActivityLog);
         setFocusedPane("tree");
-        report(reason ?? `worktree: ${worktreeLabel(worktree)}`);
+        report(reason ?? `switched to ${worktreeLabel(worktree)}`);
       });
       void runChecks(fresh);
     } catch (error) {
@@ -1648,7 +1685,7 @@ function createState() {
         return;
       }
       report(
-        error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error),
+        `couldn't switch worktree: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`,
         "error",
       );
     }
@@ -1938,6 +1975,7 @@ function createState() {
     ideTemplate,
     jumpTarget,
     lineMap,
+    loadFullContent,
     loadWorktrees,
     mainWorktreePath,
     moveFocus,
@@ -2038,6 +2076,7 @@ function createState() {
     sidebarOpen,
     sidebarWidth,
     status,
+    statusHint,
     statusRight,
     statusRightLevel,
     switchWorktree,
@@ -2051,6 +2090,7 @@ function createState() {
     togglePinActiveTab,
     treeRows,
     truncated,
+    truncatedHidden,
     viewerDecoration,
     viewerHeight,
     viewerScrollTop,

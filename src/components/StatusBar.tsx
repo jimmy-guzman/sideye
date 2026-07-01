@@ -6,15 +6,6 @@ import { useTheme } from "@/theme/context";
 
 export function StatusBar() {
   const theme = useTheme();
-  const hint = () => {
-    if (state.findOpen()) {
-      return "type to find · enter confirm · esc cancel";
-    }
-    if (state.findActive()) {
-      return "n/N next/prev · esc clear find";
-    }
-    return "? keys · q quit";
-  };
   // Pair the level glyph with its color so severity reads without relying on color
   // Alone, the way the counts badge and problems panel already do. An idle bar (no
   // Leveled message) renders bare: no glyph, neutral color.
@@ -34,7 +25,7 @@ export function StatusBar() {
       paddingRight={1}
       backgroundColor={theme.colors.surface.base}
     >
-      <text fg={theme.colors.text.muted}>{hint()}</text>
+      <text fg={theme.colors.text.muted}>{state.statusHint()}</text>
       <text fg={status().fg}>{status().text}</text>
     </box>
   );

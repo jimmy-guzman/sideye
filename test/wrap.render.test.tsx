@@ -22,14 +22,12 @@ describe("word wrap toggle", () => {
       await settleUntil("app chrome", (frame) => frame.includes("sideye"), 5);
 
       mockInput.pressKey("z");
-      const wrapped = await settleUntil("wrap on", (frame) => frame.includes("long lines: wrap"));
-      expect(wrapped).toContain("long lines: wrap");
+      const wrapped = await settleUntil("wrap on", (frame) => frame.includes("wrap on"));
+      expect(wrapped).toContain("wrap on");
 
       mockInput.pressKey("z");
-      const scrolled = await settleUntil("wrap off", (frame) =>
-        frame.includes("long lines: scroll"),
-      );
-      expect(scrolled).toContain("long lines: scroll");
+      const scrolled = await settleUntil("wrap off", (frame) => frame.includes("wrap off"));
+      expect(scrolled).toContain("wrap off");
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

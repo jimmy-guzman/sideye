@@ -50,7 +50,8 @@ export interface NavigableLine {
 
 export interface BuiltDiff {
   rows: DiffRow[];
-  truncated: boolean;
+  /** Line rows dropped by the `maxLines` cap (0 when the whole diff fit). */
+  hiddenLines: number;
 }
 
 export function isLineRow(row: DiffRow): row is DiffLineRow {
@@ -136,7 +137,7 @@ export function buildDiffRows(
   }
 
   if (options.full) {
-    return { rows, truncated: false };
+    return { hiddenLines: 0, rows };
   }
 
   let body = 0;
@@ -146,11 +147,14 @@ export function buildDiffRows(
     }
     body += 1;
     if (body > options.maxLines) {
-      return { rows: rows.slice(0, index), truncated: true };
+      return {
+        hiddenLines: rows.slice(index).filter((row) => row.kind === "line").length,
+        rows: rows.slice(0, index),
+      };
     }
   }
 
-  return { rows, truncated: false };
+  return { hiddenLines: 0, rows };
 }
 
 /** The navigable (cursorable) lines in order; `navIndex` equals array position. */

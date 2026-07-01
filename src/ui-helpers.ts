@@ -39,7 +39,7 @@ export function placeholderText(content: FileContent | undefined) {
   }
 
   if (content.kind === "too-large") {
-    return `file too large (${Math.round(content.bytes / 1024)}kb) · f to load`;
+    return `too large (${Math.round(content.bytes / 1024)}kb) · f to load`;
   }
 
   return "file not found";
