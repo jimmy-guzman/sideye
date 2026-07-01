@@ -929,30 +929,34 @@ function createState() {
         });
   }
 
-  // All file navigation routes to the single preview tab (Zed's model): a pinned
-  // Tab already showing `path` is focused (no dup); otherwise the preview tab is
-  // Navigated in place (browse coalesces, jump pushes), or a fresh preview tab is
-  // Opened when none exists (e.g. right after a pin).
+  // All file navigation routes to the single preview tab (Zed's model): otherwise
+  // The preview tab is navigated in place (browse coalesces, jump pushes), or a
+  // Fresh preview tab is opened when none exists (e.g. right after a pin). A pinned
+  // Tab already showing `path` is the destination instead of the preview: a plain
+  // Re-focus (no line) just re-activates it, restoring where you were (no dup),
+  // While a line jump navigates within it so the target line seeds that tab's
+  // History and back/forward restore it, like any other jump.
   function navigateTo(path: string, kind: "browse" | "jump", targetLine?: number) {
     const nav = navState();
     const pinned = nav.tabs.find((tab) => !tab.preview && tab.entries[tab.index]?.path === path);
-    if (pinned !== undefined) {
+    if (pinned !== undefined && targetLine === undefined) {
       activateTab(pinned.id);
       return;
     }
     const leaving = captureCurrent();
     const arriving = arrivingLocation(path, kind, targetLine);
     const preview = nav.tabs.find((tab) => tab.preview);
-    const id = preview === undefined ? String(nextTabId) : preview.id;
-    if (preview === undefined) {
+    const openingPreview = pinned === undefined && preview === undefined;
+    const destinationId = pinned?.id ?? preview?.id ?? String(nextTabId);
+    if (openingPreview) {
       nextTabId += 1;
     }
     batch(() => {
       setNavState((current) => {
         const recorded = recordLeaving(current, leaving);
-        return preview === undefined
-          ? openTab(recorded, arriving, id, true)
-          : navigate({ ...recorded, activeTabId: preview.id }, arriving);
+        return openingPreview
+          ? openTab(recorded, arriving, destinationId, true)
+          : navigate({ ...recorded, activeTabId: destinationId }, arriving);
       });
       goToLocation(arriving);
     });
