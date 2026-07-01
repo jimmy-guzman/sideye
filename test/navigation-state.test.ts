@@ -129,7 +129,7 @@ test("a line jump into an already-pinned file seeds its history so back restores
 
 test("re-focusing an already-pinned file with no line target keeps its own remembered spot", () => {
   seed(["a.ts", "b.ts"]);
-  state.selectFile("a.ts");
+  state.selectFile("a.ts", { escalate: true, line: 7 }); // Remember a.ts at line 7
   state.togglePinActiveTab(); // Pin a.ts
   state.selectFile("b.ts"); // Fresh preview on b.ts
   expect(state.tabItems()).toHaveLength(2);
@@ -138,6 +138,8 @@ test("re-focusing an already-pinned file with no line target keeps its own remem
   expect(state.tabItems()).toHaveLength(2);
   expect(state.selectedPath()).toBe("a.ts");
   expect(state.tabItems().find((tab) => tab.active)?.preview).toBe(false);
+  // The refocus restores a.ts's remembered line, not a reset to the first change.
+  expect(state.pendingRestore()?.cursorLine).toBe(7);
 });
 
 test("consecutive tree browsing collapses to one history entry", () => {
