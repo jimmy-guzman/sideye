@@ -180,6 +180,16 @@ describe("project content search", () => {
         (frame) => frame.includes("▸ src/a.ts") && !frame.includes("needle = 2"),
       );
       expect(collapsed).toContain("1 match in 1 file");
+
+      // Results focus has no text input, so global keys still work: ? opens
+      // The help overlay over the pane.
+      mockInput.pressKey("?");
+      await settleUntil("help over search", (frame) => frame.includes("keyboard shortcuts"));
+      mockInput.pressEscape();
+      await settleUntil(
+        "help closed, pane intact",
+        (frame) => !frame.includes("keyboard shortcuts") && frame.includes("▸ src/a.ts"),
+      );
     } finally {
       renderer.destroy();
       rmSync(repoRoot, { force: true, recursive: true });

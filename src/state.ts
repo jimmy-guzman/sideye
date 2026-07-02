@@ -629,15 +629,11 @@ function createState() {
   // Context lines and feed the highlighter; a binary or oversized file yields no
   // Lines and its matches degrade to grep-text-only rows.
   function readSearchLines(root: string, matches: readonly SearchMatch[], signal: AbortSignal) {
-    // A trailing newline splits into a phantom empty last line; drop it so an
-    // End-of-file match never shows a blank context row.
-    const contentLines = (content: FileContent) => {
-      if (content.kind !== "text") {
-        return undefined;
-      }
-      const lines = content.content.split(/\r?\n/);
-      return lines.at(-1) === "" ? lines.slice(0, -1) : lines;
-    };
+    // TextContent already stripped the single trailing newline, so a plain split
+    // Is line-exact: no phantom empty last line, and a genuine final blank line
+    // (a file ending in two newlines) is kept — git grep can match on it.
+    const contentLines = (content: FileContent) =>
+      content.kind === "text" ? content.content.split(/\r?\n/) : undefined;
     const paths = [...new Set(matches.map((match) => match.path))];
     return runtime.runPromise(
       File.use((file) =>
@@ -647,7 +643,9 @@ function createState() {
               .content(root, path, { full: false })
               .pipe(Effect.map((content) => [path, contentLines(content)] as const)),
           ),
-          { concurrency: "unbounded" },
+          // Bounded: a capped result set can still touch hundreds of files, and
+          // Unbounded async reads would open that many descriptors at once.
+          { concurrency: 16 },
         ),
       ).pipe(
         Effect.map(
@@ -680,8 +678,14 @@ function createState() {
     const options = { caseSensitive: searchCaseSensitive(), regex: searchRegex() };
     const glob = searchGlob().trim();
     const globTokens = glob === "" ? undefined : glob.split(/\s+/);
+    // Track the git model itself (not the set-equal `changedPaths` memo, and in
+    // Every scope): a content-only edit to an already-changed file keeps the
+    // Path-set identical but moves matches and line numbers, so the grep must
+    // Re-run on each model commit or results, context, and jump targets go stale
+    // Against the working tree — the agent-edits-while-you-watch core scenario.
+    const model = gitModel();
     const changedScopePaths =
-      searchScope() === "changed" ? gitModel().changed.map((file) => file.path) : undefined;
+      searchScope() === "changed" ? model.changed.map((file) => file.path) : undefined;
     if (query === "" || root === "") {
       batch(() => {
         setSearchResults([]);
@@ -780,18 +784,41 @@ function createState() {
     });
   }
 
-  // Hop the selection across navigable rows (matches and file headers), skipping
-  // Context lines and gaps; |steps| > 1 is the half-page jump.
-  function moveSearchSelection(steps: number) {
+  // Hop the selection to the next/previous navigable row (matches and file
+  // Headers), skipping context lines and gaps.
+  function moveSearchSelection(direction: number) {
     const items = searchItems();
-    const landed = Array.from({ length: Math.abs(steps) }).reduce<number>((current) => {
-      const next =
-        steps > 0
-          ? items.findIndex((item, index) => index > current && isNavigableSearchItem(item))
-          : items.findLastIndex((item, index) => index < current && isNavigableSearchItem(item));
-      return next === -1 ? current : next;
-    }, searchIndex());
-    setSearchSelection(landed);
+    const current = searchIndex();
+    const next =
+      direction > 0
+        ? items.findIndex((item, index) => index > current && isNavigableSearchItem(item))
+        : items.findLastIndex((item, index) => index < current && isNavigableSearchItem(item));
+    if (next !== -1) {
+      setSearchSelection(next);
+    }
+  }
+
+  // Half-page the selection by *visual* rows (the viewport unit ctrl-d/ctrl-u
+  // Promise), then snap to the nearest navigable row in the travel direction —
+  // Counting navigable hops instead would overshoot by each match's context
+  // Rows and headers.
+  function pageSearchSelection(direction: number) {
+    const items = searchItems();
+    const step = Math.max(1, Math.floor(searchListHeight() / 2)) * direction;
+    const target = Math.max(0, Math.min(searchIndex() + step, items.length - 1));
+    const snapped =
+      direction > 0
+        ? items.findIndex((item, index) => index >= target && isNavigableSearchItem(item))
+        : items.findLastIndex((item, index) => index <= target && isNavigableSearchItem(item));
+    const landed =
+      snapped !== -1
+        ? snapped
+        : direction > 0
+          ? items.findLastIndex(isNavigableSearchItem)
+          : items.findIndex(isNavigableSearchItem);
+    if (landed !== -1) {
+      setSearchSelection(landed);
+    }
   }
 
   // Keep the selection on a navigable row as the item list changes underneath it
@@ -837,7 +864,8 @@ function createState() {
 
   // Open a result row (Enter or a click): a match line lands the caret on its
   // Exact column; a context line lands line-level. Both route through the same
-  // JumpTarget path as problems/references navigation.
+  // JumpTarget path as problems/references navigation, whose goToLocation step
+  // Closes the search view like any other navigation.
   function jumpToSearchItem(index: number) {
     const item = searchItems()[index];
     if (item === undefined || item.kind !== "line") {
@@ -846,7 +874,6 @@ function createState() {
     batch(() => {
       setSearchIndex(index);
       selectFile(item.path, { column: item.match?.column, escalate: true, line: item.line });
-      closeSearch();
     });
   }
 
@@ -889,20 +916,6 @@ function createState() {
       }
     });
   }
-
-  // Any navigation to a file (the tree, the palette, recency, a search jump)
-  // Leaves the search view: the main area shows the file that was just selected.
-  createEffect(
-    on(
-      selectedPath,
-      () => {
-        if (mainView() === "search") {
-          closeSearch();
-        }
-      },
-      { defer: true },
-    ),
-  );
 
   // Search results are repo-specific paths: a worktree switch (or the deleted-
   // Worktree recovery) invalidates them. Clear the snapshot but keep the query,
@@ -1006,12 +1019,20 @@ function createState() {
     return Math.max(SIDEBAR_MIN_WIDTH, Math.min(desired, sidebarMax()));
   });
   // Closing the sidebar moves focus off the now-hidden tree so keys still land
-  // Somewhere; the `b` toggle and a shrink-past-minimum share this one path.
+  // Somewhere, on whichever view the main area shows; the `ctrl-b` toggle and a
+  // Shrink-past-minimum share this one path.
   const collapseSidebar = () => {
     if (focusedPane() === "tree") {
-      setFocusedPane("diff");
+      setFocusedPane(mainView() === "search" ? "search" : "diff");
     }
     setSidebarOpen(false);
+  };
+  const toggleSidebar = () => {
+    if (sidebarOpen()) {
+      collapseSidebar();
+    } else {
+      setSidebarOpen(true);
+    }
   };
   // Nudges seed from the current rendered width on first use so the step is
   // Relative to what's on screen, not a stale override. Shrinking past the
@@ -1178,7 +1199,11 @@ function createState() {
 
   // Drive the live signals to a Location and enqueue its restore. The fullContent
   // Set is additive (a path stays un-truncated globally); back never re-truncates.
+  // Any navigation reveals the file view. Keyed here rather than on a
+  // SelectedPath *change*, so a jump landing on the already-selected file still
+  // Closes the search view instead of being consumed invisibly behind it.
   function goToLocation(location: Location) {
+    closeSearch();
     setSelectedPath(location.path);
     setFileView(location.fileView);
     if (location.fullContent) {
@@ -2459,6 +2484,7 @@ function createState() {
     overflow,
     overlayLeft,
     overlayWidth,
+    pageSearchSelection,
     paneHeight,
     pendingRestore,
     pinActiveTab,
@@ -2576,6 +2602,7 @@ function createState() {
     toggleSearchGroup,
     toggleSearchRegex,
     toggleSearchScope,
+    toggleSidebar,
     treeRows,
     truncated,
     truncatedHidden,

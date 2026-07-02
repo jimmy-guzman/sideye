@@ -187,7 +187,9 @@ export const GitLive = Layer.effect(
       search: (repoRoot, query, paths, options) =>
         process.run(searchArgs(query, paths, options), repoRoot, { allowedExitCodes: [0, 1] }).pipe(
           retryTransient,
-          Effect.map((result) => parseSearchOutput(result.stdout)),
+          // Bytes, not the decoded stdout: the parse converts git's byte columns
+          // Against the raw line, immune to replacement-char width drift.
+          Effect.map((result) => parseSearchOutput(result.stdoutBytes)),
           Effect.mapError(toGitError),
         ),
       worktrees: (repoRoot) =>

@@ -55,7 +55,7 @@ export function SearchPane() {
 
   const innerWidth = () => Math.max(1, state.terminalWidth() - state.sidebarWidth() - 2);
   const scopeLabel = () => (state.searchScope() === "changed" ? "changes" : "repo");
-  const focusIn = (target: "query" | "glob") => () =>
+  const focusIn = (target: "query" | "glob") =>
     state.focusedPane() === "search" && state.searchFocus() === target;
 
   const fileCount = createMemo(() => new Set(state.searchResults().map((m) => m.path)).size);
@@ -265,7 +265,7 @@ export function SearchPane() {
             ref={(el: InputRenderable) => {
               el.value = state.searchQuery();
             }}
-            focused={focusIn("query")()}
+            focused={focusIn("query")}
             width="100%"
             placeholder={`search in ${scopeLabel()}…`}
             {...inputColors}
@@ -296,7 +296,7 @@ export function SearchPane() {
             ref={(el: InputRenderable) => {
               el.value = state.searchGlob();
             }}
-            focused={focusIn("glob")()}
+            focused={focusIn("glob")}
             width="100%"
             placeholder="all files (globs, space-separated)"
             {...inputColors}

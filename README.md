@@ -260,7 +260,7 @@ repo's own, then your `PATH`), so diagnostics work out of the box. Pass
 | Key       | Action                                            |
 | --------- | ------------------------------------------------- |
 | `p`       | toggle the problems panel                         |
-| `b`       | toggle the file tree sidebar                      |
+| `ctrl-b`  | toggle the file tree sidebar                      |
 | `[` / `]` | shrink / grow the sidebar (shrink past min hides) |
 | `\`       | reset the sidebar to its default width            |
 

@@ -127,11 +127,14 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      // The search view owns the keyboard while it is the focused pane: sub-focus
-      // Cycling, result navigation, and the query toggles live here; text and
-      // Submit (the jump) are the input elements' job (like the palette). With
-      // The tree focused, keys fall through to the tree branch while the view
-      // Stays on screen.
+      // The search view's sub-focus routing while it is the focused pane: esc,
+      // The tab cycle, and the query toggles are handled for every sub-focus;
+      // Text and submit (the jump) are the input elements' job (like the
+      // Palette). Only the input sub-focuses swallow the remaining keys (they
+      // Own printable characters); results focus has no input, so unhandled
+      // Keys fall through and the global bindings (q, ?, ctrl-p, p...) keep
+      // Working, matching the problems pane. With the tree focused, keys fall
+      // Through to the tree branch while the view stays on screen.
       if (state.mainView() === "search" && state.focusedPane() === "search") {
         if (key.name === "escape") {
           state.closeSearch();
@@ -158,57 +161,67 @@ export function createKeyHandler(host: HostEffects) {
           state.toggleSearchCase();
           return;
         }
-        if (state.searchFocus() === "results") {
-          const items = state.searchItems();
-          const halfPage = Math.max(1, Math.floor(state.searchListHeight() / 2));
-          if (key.name === "j" || key.name === "down" || (key.ctrl && key.name === "n")) {
-            state.moveSearchSelection(1);
-          } else if (key.name === "k" || key.name === "up" || (key.ctrl && key.name === "p")) {
-            // At the first navigable row, up returns to the query field.
-            const current = state.searchIndex();
-            const previous = items.findLastIndex(
-              (item, index) => index < current && isNavigableSearchItem(item),
-            );
-            if (previous === -1) {
-              state.setSearchFocus("query");
-            } else {
-              state.moveSearchSelection(-1);
-            }
-          } else if (key.ctrl && key.name === "d") {
-            state.moveSearchSelection(halfPage);
-          } else if (key.ctrl && key.name === "u") {
-            state.moveSearchSelection(-halfPage);
-          } else if (key.name === "return") {
-            const item = items[state.searchIndex()];
-            if (item?.kind === "header") {
+        if (state.searchFocus() !== "results") {
+          // Query/glob focus: down enters the results; ctrl-b still reaches the
+          // Sidebar (chords are never typed text); everything else is the input's.
+          if (key.name === "down" || (key.ctrl && key.name === "n")) {
+            state.setSearchFocus("results");
+            return;
+          }
+          if (key.ctrl && key.name === "b") {
+            state.toggleSidebar();
+          }
+          return;
+        }
+        const items = state.searchItems();
+        if (key.name === "j" || key.name === "down" || (key.ctrl && key.name === "n")) {
+          state.moveSearchSelection(1);
+          return;
+        }
+        if (key.name === "k" || key.name === "up" || (key.ctrl && key.name === "p")) {
+          // At the first navigable row, up returns to the query field.
+          const current = state.searchIndex();
+          const previous = items.findLastIndex(
+            (item, index) => index < current && isNavigableSearchItem(item),
+          );
+          if (previous === -1) {
+            state.setSearchFocus("query");
+          } else {
+            state.moveSearchSelection(-1);
+          }
+          return;
+        }
+        if (key.ctrl && key.name === "d") {
+          state.pageSearchSelection(1);
+          return;
+        }
+        if (key.ctrl && key.name === "u") {
+          state.pageSearchSelection(-1);
+          return;
+        }
+        if (key.name === "return") {
+          const item = items[state.searchIndex()];
+          if (item?.kind === "header") {
+            state.toggleSearchGroup(item.path);
+          } else {
+            state.jumpToSearchItem(state.searchIndex());
+          }
+          return;
+        }
+        if (key.name === "h" || key.name === "left" || key.name === "l" || key.name === "right") {
+          const item = items[state.searchIndex()];
+          if (item !== undefined && item.kind !== "gap") {
+            const collapse = key.name === "h" || key.name === "left";
+            // A visible line row means its group is expanded; only headers can
+            // Already be collapsed.
+            const collapsed = item.kind === "header" && item.collapsed;
+            if (collapse !== collapsed) {
               state.toggleSearchGroup(item.path);
-            } else {
-              state.jumpToSearchItem(state.searchIndex());
-            }
-          } else if (
-            key.name === "h" ||
-            key.name === "left" ||
-            key.name === "l" ||
-            key.name === "right"
-          ) {
-            const item = items[state.searchIndex()];
-            if (item !== undefined && item.kind !== "gap") {
-              const collapse = key.name === "h" || key.name === "left";
-              // A visible line row means its group is expanded; only headers can
-              // Already be collapsed.
-              const collapsed = item.kind === "header" && item.collapsed;
-              if (collapse !== collapsed) {
-                state.toggleSearchGroup(item.path);
-              }
             }
           }
           return;
         }
-        // Query/glob focus: down enters the results; everything else is the input's.
-        if (key.name === "down" || (key.ctrl && key.name === "n")) {
-          state.setSearchFocus("results");
-        }
-        return;
+        // Unhandled in results focus: fall through to the global bindings.
       }
 
       // The references overlay owns the keyboard while open. It has no input, so Enter
@@ -250,7 +263,9 @@ export function createKeyHandler(host: HostEffects) {
 
       // A committed find rebinds n/N to cycle matches and esc to clear it; every
       // Other key falls through so diff navigation still works over the highlights.
-      if (state.findActive()) {
+      // Only while the file view is showing: with the search view up, cycling
+      // Would move the cursor of a diff that isn't on screen.
+      if (state.findActive() && state.mainView() === "file") {
         if (key.name === "escape") {
           state.resetFind();
           return;
@@ -279,7 +294,10 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "/" && state.diffView() !== undefined) {
+      // Only while the file view is showing: the find bar's input lives inside
+      // The Viewer's file branch, so opening it under the search view would
+      // Focus an unmounted input and wedge the keyboard.
+      if (key.name === "/" && state.diffView() !== undefined && state.mainView() === "file") {
         // Solid mounts and focuses the find input within this same key event, so
         // Without preventDefault the triggering "/" would be typed into it.
         key.preventDefault();
@@ -295,20 +313,20 @@ export function createKeyHandler(host: HostEffects) {
       }
 
       if (key.name === "escape") {
-        // The search view is on screen with the tree focused: esc dismisses the
-        // View (back to the file), not the app.
-        if (state.mainView() === "search") {
-          state.closeSearch();
-          return;
-        }
+        // Esc closes panels innermost-first: the problems panel, then the
+        // Search view left on screen with the tree focused, then the app.
         if (state.problemsOpen()) {
           state.setProblemsOpen(false);
           if (state.focusedPane() === "problems") {
             state.setFocusedPane("tree");
           }
-        } else {
-          host.quit();
+          return;
         }
+        if (state.mainView() === "search") {
+          state.closeSearch();
+          return;
+        }
+        host.quit();
         return;
       }
 
@@ -334,12 +352,10 @@ export function createKeyHandler(host: HostEffects) {
         return;
       }
 
-      if (key.name === "b") {
-        if (state.sidebarOpen()) {
-          state.collapseSidebar();
-        } else {
-          state.setSidebarOpen(true);
-        }
+      // Ctrl-b (not a plain b) so the toggle also works while the search pane's
+      // Inputs own the printable keys.
+      if (key.ctrl && key.name === "b") {
+        state.toggleSidebar();
         return;
       }
 

@@ -54,17 +54,19 @@ describe("searchArgs", () => {
 });
 
 describe("parseSearchOutput", () => {
+  const bytes = (output: string) => new TextEncoder().encode(output);
+
   test(String.raw`parses NUL-framed path\0line\0column\0text records`, () => {
     const output =
       "src/a.ts\x002\x009\x00  const needle = 1\nsrc/b.ts\x0010\x008\x00return needle\n";
-    expect(parseSearchOutput(output)).toEqual([
+    expect(parseSearchOutput(bytes(output))).toEqual([
       { column: 9, line: 2, path: "src/a.ts", text: "  const needle = 1" },
       { column: 8, line: 10, path: "src/b.ts", text: "return needle" },
     ]);
   });
 
   test("keeps colons and other delimiters inside the matched text", () => {
-    expect(parseSearchOutput("a.ts\x005\x0013\x00const url = `http://x`\n")).toEqual([
+    expect(parseSearchOutput(bytes("a.ts\x005\x0013\x00const url = `http://x`\n"))).toEqual([
       { column: 13, line: 5, path: "a.ts", text: "const url = `http://x`" },
     ]);
   });
@@ -74,18 +76,32 @@ describe("parseSearchOutput", () => {
     // And the em dash 3 in UTF-8, but each is 1 UTF-16 unit.
     const text = "héllo — needle";
     const byteColumn = Buffer.from("héllo — ", "utf8").length + 1;
-    expect(parseSearchOutput(`a.ts\x001\x00${byteColumn}\x00${text}\n`)).toEqual([
+    expect(parseSearchOutput(bytes(`a.ts\x001\x00${byteColumn}\x00${text}\n`))).toEqual([
       { column: 9, line: 1, path: "a.ts", text },
     ]);
   });
 
+  test("stays byte-accurate when the line holds invalid UTF-8 before the match", () => {
+    // "caf\xE9 needle" in Latin-1: 0xE9 is 1 byte to git grep but decodes to a
+    // Replacement char (3 bytes if re-encoded), which must not skew the column.
+    const record = Buffer.concat([
+      Buffer.from("a.ts\x001\x006\x00", "utf8"),
+      Buffer.from("caf", "utf8"),
+      Buffer.from([233]),
+      Buffer.from(" needle\n", "utf8"),
+    ]);
+    expect(parseSearchOutput(record)).toEqual([
+      { column: 6, line: 1, path: "a.ts", text: "caf� needle" },
+    ]);
+  });
+
   test("drops malformed records", () => {
-    expect(parseSearchOutput("a.ts\x005\x00no column here\n")).toEqual([]);
-    expect(parseSearchOutput("garbage\n")).toEqual([]);
+    expect(parseSearchOutput(bytes("a.ts\x005\x00no column here\n"))).toEqual([]);
+    expect(parseSearchOutput(bytes("garbage\n"))).toEqual([]);
   });
 
   test("empty output yields no matches", () => {
-    expect(parseSearchOutput("")).toEqual([]);
+    expect(parseSearchOutput(bytes(""))).toEqual([]);
   });
 });
 
