@@ -48,7 +48,7 @@ const KEY_HELP: { entries: [combo: string, action: string][]; heading: string }[
   {
     entries: [
       ["/", "find in the viewer; n/N cycle matches, esc clears"],
-      ["ctrl-f", "search file contents; ctrl-a toggles changes/repo"],
+      ["ctrl-f", "project search pane; regex/case/scope/glob toggles"],
       ["v", "toggle diff ↔ full file view for a changed file"],
       ["z", "toggle long-line wrap in the viewer"],
       ["f", "load full content when truncated"],
@@ -84,7 +84,7 @@ const KEY_HELP: { entries: [combo: string, action: string][]; heading: string }[
   {
     entries: [
       ["p", "toggle the problems panel"],
-      ["b", "toggle the file tree sidebar"],
+      ["ctrl-b", "toggle the file tree sidebar"],
       ["[ / ] / \\", "shrink (collapses past min) / grow / reset sidebar"],
     ],
     heading: "layout",
